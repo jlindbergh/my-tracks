@@ -1,0 +1,190 @@
+// Package api implements the HTTP API used by the frontend.
+package api
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/jlindbergh/my-tracks/backend/internal/auth"
+	"github.com/jlindbergh/my-tracks/backend/internal/importer"
+	"github.com/jlindbergh/my-tracks/backend/internal/store"
+)
+
+// maxUploadSize caps one import request, which may hold many files.
+const maxUploadSize = 500 << 20
+
+// maxZoom matches maxzoom of the activities source in mapserver/config.yaml.
+const maxZoom = 22
+
+// Server serves the API.
+type Server struct {
+	store    *store.Store
+	importer *importer.Importer
+	martin   *url.URL
+	client   *http.Client
+	log      *slog.Logger
+}
+
+// New returns a Server. martinURL is the internal base URL of Martin.
+func New(s *store.Store, im *importer.Importer, martinURL *url.URL, log *slog.Logger) *Server {
+	return &Server{
+		store:    s,
+		importer: im,
+		martin:   martinURL,
+		client:   &http.Client{Timeout: 30 * time.Second},
+		log:      log,
+	}
+}
+
+// Routes returns the API's routes. Authentication middleware must run first.
+func (s *Server) Routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/healthz", s.healthz)
+	mux.HandleFunc("GET /api/me", auth.Require(s.me))
+	mux.HandleFunc("GET /api/activities", auth.Require(s.listActivities))
+	mux.HandleFunc("POST /api/activities/import", auth.Require(s.importActivities))
+	mux.HandleFunc("GET /api/tiles/{z}/{x}/{y}", auth.Require(s.tile))
+	return mux
+}
+
+func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) me(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+	s.writeJSON(w, http.StatusOK, u)
+}
+
+func (s *Server) listActivities(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+	list, err := s.store.ListActivities(r.Context(), u.ID)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, list)
+}
+
+// importActivities accepts a multipart form with one or more "files" fields.
+func (s *Server) importActivities(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
+	mr, err := r.MultipartReader()
+	if err != nil {
+		http.Error(w, "expected multipart/form-data", http.StatusBadRequest)
+		return
+	}
+
+	results := []importer.Result{}
+	for {
+		part, err := mr.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			http.Error(w, "invalid upload: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if part.FormName() != "files" || part.FileName() == "" {
+			part.Close()
+			continue
+		}
+
+		data, err := io.ReadAll(io.LimitReader(part, importer.MaxFileSize+1))
+		part.Close()
+		if err != nil {
+			http.Error(w, "invalid upload: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		res, err := s.importer.ImportGPX(r.Context(), u.ID, part.FileName(), data)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		results = append(results, res)
+	}
+
+	s.writeJSON(w, http.StatusOK, results)
+}
+
+// tile proxies a vector tile request to Martin for the authenticated user.
+// The user_id sent to Martin always comes from the session, and nothing
+// from the client's query string is forwarded.
+func (s *Server) tile(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.UserFrom(r.Context())
+
+	z, x, y, ok := parseTile(r)
+	if !ok {
+		http.Error(w, "invalid tile coordinates", http.StatusBadRequest)
+		return
+	}
+
+	target := s.martin.JoinPath("activities", strconv.Itoa(z), strconv.Itoa(x), strconv.Itoa(y))
+	target.RawQuery = url.Values{"user_id": {u.ID}}.Encode()
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target.String(), nil)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		s.serverError(w, r, fmt.Errorf("fetch tile: %w", err))
+		return
+	}
+	defer resp.Body.Close()
+
+	// Tiles are private and change with every import.
+	w.Header().Set("Cache-Control", "private, no-store")
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		w.Header().Set("Content-Type", "application/vnd.mapbox-vector-tile")
+		w.WriteHeader(http.StatusOK)
+		if _, err := io.Copy(w, resp.Body); err != nil {
+			s.log.WarnContext(r.Context(), "copy tile", "err", err)
+		}
+	case http.StatusNoContent:
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		s.log.ErrorContext(r.Context(), "martin error", "status", resp.StatusCode, "url", target.Path)
+		http.Error(w, "tile server error", http.StatusBadGateway)
+	}
+}
+
+func parseTile(r *http.Request) (z, x, y int, ok bool) {
+	z, errZ := strconv.Atoi(r.PathValue("z"))
+	x, errX := strconv.Atoi(r.PathValue("x"))
+	y, errY := strconv.Atoi(r.PathValue("y"))
+	if errZ != nil || errX != nil || errY != nil || z < 0 || z > maxZoom {
+		return 0, 0, 0, false
+	}
+	n := 1 << z
+	if x < 0 || x >= n || y < 0 || y >= n {
+		return 0, 0, 0, false
+	}
+	return z, x, y, true
+}
+
+func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		s.log.Warn("encode response", "err", err)
+	}
+}
+
+func (s *Server) serverError(w http.ResponseWriter, r *http.Request, err error) {
+	s.log.ErrorContext(r.Context(), "request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	http.Error(w, "internal server error", http.StatusInternalServerError)
+}
