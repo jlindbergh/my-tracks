@@ -1,0 +1,19 @@
+# Martin tile server configuration.
+# Martin is only reachable on the internal compose network; the backend
+# proxies tile requests to it and injects the authenticated user_id.
+
+listen_addresses: '0.0.0.0:3000'
+
+# Tiles are per user and change on every import, so don't cache them here.
+cache_size_mb: 0
+
+postgres:
+  connection_string: '${DATABASE_URL}'
+  # Only publish what is listed below, never tables or functions by discovery.
+  auto_publish: false
+  functions:
+    activities:
+      schema: public
+      function: activities_tiles
+      minzoom: 0
+      maxzoom: 22
