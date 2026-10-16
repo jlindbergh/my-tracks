@@ -1,0 +1,4 @@
+# Your own GPX files for batch import; never committed.
+*
+!.gitignore
+!README.md
