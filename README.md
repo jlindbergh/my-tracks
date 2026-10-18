@@ -19,7 +19,20 @@ To batch-import a folder, put your files in [samples/](samples/) (subfolders are
 docker compose run --rm backend import
 ```
 
-Re-importing a file the user already has is skipped, so running it again is safe.
+Running it again is safe; see [Duplicate detection](#duplicate-detection).
+
+### Duplicate detection
+
+Each import is checked against the user's own activities (never other users'):
+
+- **Already imported:** a byte-identical file (same SHA-256) is always skipped.
+- **Possible duplicate:** the file is *not* imported if an existing activity starts within **2 seconds** of it, and its distance and duration are both within **2%** of the larger value. Duration is skipped when either side has no timestamps.
+
+GPS points aren't compared, because Garmin, Strava, Runkeeper etc. record and resample them differently. Files without timestamps can only be detected as already imported.
+
+Possible duplicates can still be imported on purpose. The UI lists them side by side with the matching activity, explains the rules, and lets the user tick the ones to import anyway. The batch command takes `-allow-duplicates`.
+
+The tolerances are the constants `DuplicateStartTolerance` and `DuplicateRelativeTolerance` in [backend/internal/importer/duplicates.go](backend/internal/importer/duplicates.go). The frontend reads them from `GET /api/import/rules`, so changing them there also updates what users are told.
 
 ### Services
 
@@ -60,8 +73,11 @@ The default basemap is [OpenFreeMap](https://openfreemap.org/) ("Liberty" style)
 ## Development
 
 ```bash
-# Backend tests (no local Go needed)
-docker run --rm -v "$PWD/backend":/src -w /src golang:1.25-alpine go test ./...
+# Backend tests (no local Go needed). With the stack running, this includes
+# the database tests; without TEST_DATABASE_URL they are skipped.
+docker run --rm --network my-tracks_default \
+  -e TEST_DATABASE_URL=postgres://mytracks_app:dev-app-pw@db:5432/mytracks \
+  -v "$PWD/backend":/src -w /src golang:1.25-alpine go test ./...
 
 # Frontend type check, with Node installed locally
 cd frontend && npm install && npm run typecheck
