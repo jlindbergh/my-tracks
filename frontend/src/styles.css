@@ -8,6 +8,8 @@
   --accent: #2563eb;
   --accent-fg: #ffffff;
   --error: #b42318;
+  --warning-bg: #fff8e6;
+  --warning-border: #f0d48a;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--fg);
   background: var(--bg);
@@ -23,6 +25,8 @@
     --selected: #1e2b3f;
     --accent: #4f8cf7;
     --error: #f97066;
+    --warning-bg: #2a2416;
+    --warning-border: #5c4a1f;
   }
 }
 
@@ -49,7 +53,7 @@ body,
   gap: 12px;
   padding: 16px;
   border-right: 1px solid var(--border);
-  overflow: hidden;
+  overflow-y: auto;
   background: var(--bg);
 }
 
@@ -82,6 +86,17 @@ button.primary {
 button.primary:disabled {
   opacity: 0.6;
   cursor: progress;
+}
+
+button.secondary {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 13px;
+}
+
+button.secondary:disabled {
+  opacity: 0.6;
 }
 
 button.link {
@@ -122,6 +137,103 @@ button.link {
   padding-left: 18px;
 }
 
+.import-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rules {
+  width: 100%;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.rules summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.rules ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.rules li + li {
+  margin-top: 4px;
+}
+
+.review {
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.review h2 {
+  font-size: 1rem;
+  margin: 0 0 4px;
+}
+
+.review > p {
+  margin: 0 0 8px;
+}
+
+.review > ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.review > ul > li + li {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--warning-border);
+}
+
+.review-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.review-item input {
+  margin-top: 3px;
+}
+
+.review-file {
+  display: block;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.review table {
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  margin: 4px 0;
+}
+
+.review th,
+.review td {
+  text-align: left;
+  padding: 1px 8px 1px 0;
+  vertical-align: top;
+}
+
+.review tbody th,
+.review thead th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.review-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
 .error {
   color: var(--error);
   font-size: 0.875rem;
@@ -132,8 +244,6 @@ button.link {
   list-style: none;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
-  flex: 1;
 }
 
 .activity {

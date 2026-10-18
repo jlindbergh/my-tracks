@@ -15,6 +15,22 @@ export function formatDate(value: string | number | null): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+export function formatDateTime(value: string | null): string {
+  if (value == null) return 'Unknown time';
+  return new Date(value).toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+export function formatPercent(fraction: number): string {
+  return `${Number((fraction * 100).toFixed(1))}%`;
+}
+
 /** Line colors per sport, shared by the map and the activity list. */
 export const sportColors: Record<string, string> = {
   running: '#e4572e',
