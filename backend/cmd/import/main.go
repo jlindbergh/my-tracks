@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jlindbergh/my-tracks/backend/internal/importer"
 	"github.com/jlindbergh/my-tracks/backend/internal/store"
@@ -28,6 +29,8 @@ func main() {
 func run() error {
 	dir := flag.String("dir", "/samples", "directory to search (recursively) for .gpx files")
 	email := flag.String("user", os.Getenv("DEV_USER_EMAIL"), "email of the user who will own the activities")
+	allowDuplicates := flag.Bool("allow-duplicates", false,
+		"also import files that look like duplicates of existing activities (exact re-imports are still skipped)")
 	flag.Parse()
 
 	if *email == "" {
@@ -65,15 +68,19 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		res, err := im.ImportGPX(ctx, u.ID, path, data)
+		res, err := im.ImportGPX(ctx, u.ID, path, data, importer.Options{AllowDuplicates: *allowDuplicates})
 		if err != nil {
 			return err
 		}
 		counts[res.Status]++
-		if res.Error != "" {
-			fmt.Printf("%-9s %s: %s\n", res.Status, path, res.Error)
-		} else {
-			fmt.Printf("%-9s %s\n", res.Status, path)
+		switch {
+		case res.Error != "":
+			fmt.Printf("%-18s %s: %s\n", res.Status, path, res.Error)
+		case res.Status == importer.StatusPossibleDuplicate:
+			fmt.Printf("%-18s %s: matches %q started %s\n", res.Status, path,
+				res.Existing.Name, res.Existing.StartedAt.Format(time.DateTime))
+		default:
+			fmt.Printf("%-18s %s\n", res.Status, path)
 		}
 		return nil
 	})
@@ -81,7 +88,13 @@ func run() error {
 		return err
 	}
 
-	fmt.Printf("\n%s: %d imported, %d duplicates, %d failed\n", u.Email,
-		counts[importer.StatusImported], counts[importer.StatusDuplicate], counts[importer.StatusFailed])
+	fmt.Printf("\n%s: %d imported, %d already imported, %d possible duplicates, %d failed\n", u.Email,
+		counts[importer.StatusImported], counts[importer.StatusAlreadyImported],
+		counts[importer.StatusPossibleDuplicate], counts[importer.StatusFailed])
+	if counts[importer.StatusPossibleDuplicate] > 0 && !*allowDuplicates {
+		fmt.Printf("Possible duplicates start within %s of an existing activity, with distance and duration within %g%%.\n"+
+			"Run again with -allow-duplicates to import them anyway.\n",
+			importer.DuplicateStartTolerance, importer.DuplicateRelativeTolerance*100)
+	}
 	return nil
 }

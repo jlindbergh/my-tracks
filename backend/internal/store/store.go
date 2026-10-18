@@ -67,25 +67,145 @@ type NewActivity struct {
 	ContentSHA256  string
 }
 
-// InsertActivity stores an activity for userID. created is false, and id
-// empty, when the user has already imported a file with the same content.
-func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivity) (id string, created bool, err error) {
+// DuplicateRule decides when an activity is a possible duplicate of another
+// one by the same user: start times within StartTolerance, and distance and
+// duration within RelativeTolerance (a fraction) of the larger value.
+type DuplicateRule struct {
+	StartTolerance    time.Duration
+	RelativeTolerance float64
+}
+
+// ActivityFacts are the values of an activity used to identify it.
+type ActivityFacts struct {
+	ID        string     `json:"id,omitempty"`
+	Name      string     `json:"name"`
+	StartedAt *time.Time `json:"startedAt"`
+	DurationS *int       `json:"durationS"`
+	DistanceM float64    `json:"distanceM"`
+}
+
+// InsertStatus is the outcome of InsertActivity.
+type InsertStatus int
+
+const (
+	// Inserted means the activity was stored.
+	Inserted InsertStatus = iota
+	// SameFile means the user has already imported a byte-identical file.
+	SameFile
+	// PossibleDuplicate means an existing activity matches the DuplicateRule.
+	PossibleDuplicate
+)
+
+func (s InsertStatus) String() string {
+	switch s {
+	case Inserted:
+		return "Inserted"
+	case SameFile:
+		return "SameFile"
+	case PossibleDuplicate:
+		return "PossibleDuplicate"
+	}
+	return fmt.Sprintf("InsertStatus(%d)", int(s))
+}
+
+// InsertResult describes what InsertActivity did.
+type InsertResult struct {
+	Status InsertStatus
+	// New describes the activity that was to be inserted. Its ID is set if it was.
+	New ActivityFacts
+	// Existing is the already stored activity it matched, if any.
+	Existing *ActivityFacts
+}
+
+// InsertActivity stores an activity for userID unless the user already has
+// it. Byte-identical files are always rejected. Other activities are checked
+// against rule; pass a nil rule to store possible duplicates anyway.
+func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivity, rule *DuplicateRule) (InsertResult, error) {
 	a := na.Activity
-	err = s.pool.QueryRow(ctx, `
+	wkt := a.WKT()
+	res := InsertResult{New: ActivityFacts{Name: a.Name, StartedAt: a.StartedAt, DurationS: a.DurationS}}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return InsertResult{}, fmt.Errorf("begin import: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Serialize imports per user, so two concurrent uploads of the same
+	// activity cannot both pass the duplicate checks.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, userID); err != nil {
+		return InsertResult{}, fmt.Errorf("lock user imports: %w", err)
+	}
+
+	if err := tx.QueryRow(ctx, `SELECT ST_Length(ST_GeomFromText($1, 4326)::geography)`, wkt).
+		Scan(&res.New.DistanceM); err != nil {
+		return InsertResult{}, fmt.Errorf("measure activity: %w", err)
+	}
+
+	existing, err := scanFacts(tx.QueryRow(ctx, `
+		SELECT id, name, started_at, duration_s, distance_m
+		  FROM activities
+		 WHERE user_id = $1 AND content_sha256 = $2`,
+		userID, na.ContentSHA256))
+	if err != nil {
+		return InsertResult{}, fmt.Errorf("find same file: %w", err)
+	}
+	if existing != nil {
+		res.Status, res.Existing = SameFile, existing
+		return res, nil
+	}
+
+	if rule != nil && a.StartedAt != nil {
+		existing, err := scanFacts(tx.QueryRow(ctx, `
+			SELECT id, name, started_at, duration_s, distance_m
+			  FROM activities
+			 WHERE user_id = $1
+			   AND started_at BETWEEN $2::timestamptz - make_interval(secs => $3)
+			                      AND $2::timestamptz + make_interval(secs => $3)
+			   AND abs(distance_m - $5) <= $4 * greatest(distance_m, $5)
+			   AND (duration_s IS NULL OR $6::integer IS NULL
+			        OR abs(duration_s - $6) <= $4 * greatest(duration_s, $6))
+			 ORDER BY abs(extract(epoch FROM started_at - $2::timestamptz))
+			 LIMIT 1`,
+			userID, a.StartedAt, rule.StartTolerance.Seconds(), rule.RelativeTolerance,
+			res.New.DistanceM, a.DurationS))
+		if err != nil {
+			return InsertResult{}, fmt.Errorf("find possible duplicate: %w", err)
+		}
+		if existing != nil {
+			res.Status, res.Existing = PossibleDuplicate, existing
+			return res, nil
+		}
+	}
+
+	if err := tx.QueryRow(ctx, `
 		INSERT INTO activities
 			(user_id, name, sport, started_at, duration_s, source, source_filename, content_sha256, geom)
 		VALUES ($1, $2, $3, $4, $5, 'gpx', $6, $7, ST_GeomFromText($8, 4326))
-		ON CONFLICT (user_id, content_sha256) DO NOTHING
 		RETURNING id`,
-		userID, a.Name, a.Sport, a.StartedAt, a.DurationS, na.SourceFilename, na.ContentSHA256, a.WKT(),
-	).Scan(&id)
+		userID, a.Name, a.Sport, a.StartedAt, a.DurationS, na.SourceFilename, na.ContentSHA256, wkt,
+	).Scan(&res.New.ID); err != nil {
+		return InsertResult{}, fmt.Errorf("insert activity: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return InsertResult{}, fmt.Errorf("commit import: %w", err)
+	}
+	res.Status = Inserted
+	return res, nil
+}
+
+// scanFacts scans one row of id, name, started_at, duration_s, distance_m.
+// It returns nil if there is no row.
+func scanFacts(row pgx.Row) (*ActivityFacts, error) {
+	var f ActivityFacts
+	err := row.Scan(&f.ID, &f.Name, &f.StartedAt, &f.DurationS, &f.DistanceM)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil
+		return nil, nil
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("insert activity: %w", err)
+		return nil, err
 	}
-	return id, true, nil
+	return &f, nil
 }
 
 // ActivitySummary is an activity without its geometry.

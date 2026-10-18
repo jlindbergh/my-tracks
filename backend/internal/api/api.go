@@ -50,6 +50,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/me", auth.Require(s.me))
 	mux.HandleFunc("GET /api/activities", auth.Require(s.listActivities))
 	mux.HandleFunc("POST /api/activities/import", auth.Require(s.importActivities))
+	mux.HandleFunc("GET /api/import/rules", auth.Require(s.importRules))
 	mux.HandleFunc("GET /api/tiles/{z}/{x}/{y}", auth.Require(s.tile))
 	return mux
 }
@@ -73,9 +74,24 @@ func (s *Server) listActivities(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, list)
 }
 
-// importActivities accepts a multipart form with one or more "files" fields.
+// importRules tells the frontend how duplicates are detected, so what users
+// are told always matches what the importer does.
+func (s *Server) importRules(w http.ResponseWriter, _ *http.Request) {
+	s.writeJSON(w, http.StatusOK, struct {
+		StartToleranceS   float64 `json:"startToleranceS"`
+		RelativeTolerance float64 `json:"relativeTolerance"`
+	}{
+		StartToleranceS:   importer.DuplicateStartTolerance.Seconds(),
+		RelativeTolerance: importer.DuplicateRelativeTolerance,
+	})
+}
+
+// importActivities accepts a multipart form with one or more "files" fields
+// and returns one result per file, in upload order. With
+// ?allowDuplicates=true, possible duplicates are stored instead of reported.
 func (s *Server) importActivities(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.UserFrom(r.Context())
+	opts := importer.Options{AllowDuplicates: r.URL.Query().Get("allowDuplicates") == "true"}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
 	mr, err := r.MultipartReader()
@@ -106,7 +122,7 @@ func (s *Server) importActivities(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		res, err := s.importer.ImportGPX(r.Context(), u.ID, part.FileName(), data)
+		res, err := s.importer.ImportGPX(r.Context(), u.ID, part.FileName(), data, opts)
 		if err != nil {
 			s.serverError(w, r, err)
 			return
