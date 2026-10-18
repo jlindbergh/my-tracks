@@ -16,14 +16,20 @@ For further discussion about tech stack see [docs/tech-stack.md](docs/tech-stack
 
 
 ## Coding conventions
-Backend: Follow official standards and best practices from https://dev.to/leapcell/go-coding-official-standards-and-best-practices-284k
+### Backend
+Follow official standards and best practices from https://dev.to/leapcell/go-coding-official-standards-and-best-practices-284k
 
-Frontend: Ensure adhering to the [react reference rules](https://react.dev/reference/rules)
+
+### Frontend
+Ensure adhering to the [react reference rules](https://react.dev/reference/rules)
+Use npx audit when adding or removing packages and report if there are any dependencies with known vulnerabilities  
+
 
 ## Architecture
 Let's go full on monorepo with this
 - Keep database code and scripts in a separate module `postgis/`
 - Map server/Martin configuration and code in `mapserver/`
+- Backend base directory `backend/`
 - Frontend base directory `frontend/`
 
 
@@ -37,6 +43,9 @@ licenses of each map service before suggesting adding it.
 - Sign in with Garmin Connect option (or Strava)
 - Option for manual batch import of gpx files
 - Getting data imported and ready to view is a key flow of the application - no data, no fun!
-- 
 
+### Git hygiene
+- Use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit messages 
+- Try to keep commits small so they're easy to review.
+- Create and work in feature branches, do not merge to main without human intervention (I might regret this)
 
