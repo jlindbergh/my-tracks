@@ -21,6 +21,8 @@ docker compose run --rm backend import
 
 Running it again is safe; see [Duplicate detection](#duplicate-detection).
 
+Files without a GPS track (indoor rides, treadmill runs, gym sessions) aren't imported, since there is nothing to show on the map. The UI and the batch command report how many were skipped and their activity types. Points at 0,0 count as missing a GPS fix.
+
 ### Duplicate detection
 
 Each import is checked against the user's own activities (never other users'):
