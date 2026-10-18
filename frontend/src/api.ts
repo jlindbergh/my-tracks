@@ -13,6 +13,7 @@ export interface Activity {
 export interface ActivityFacts {
   id?: string;
   name: string;
+  sport: string;
   startedAt: string | null;
   durationS: number | null;
   distanceM: number;
@@ -20,10 +21,10 @@ export interface ActivityFacts {
 
 export interface ImportResult {
   file: string;
-  status: 'imported' | 'already_imported' | 'possible_duplicate' | 'failed';
+  status: 'imported' | 'already_imported' | 'possible_duplicate' | 'no_gps_track' | 'failed';
   activityId?: string;
   error?: string;
-  /** The activity read from the file. */
+  /** The activity read from the file. For no_gps_track only name and sport are meaningful. */
   activity?: ActivityFacts;
   /** The already imported activity it matched. */
   existing?: ActivityFacts;

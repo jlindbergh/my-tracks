@@ -27,6 +27,12 @@ export function formatDateTime(value: string | null): string {
   });
 }
 
+/** Turns a sport id like "virtual_ride" into "Virtual ride". */
+export function formatSport(sport: string): string {
+  const words = sport.replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function formatPercent(fraction: number): string {
   return `${Number((fraction * 100).toFixed(1))}%`;
 }

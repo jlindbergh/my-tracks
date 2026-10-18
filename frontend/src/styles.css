@@ -234,6 +234,35 @@ button.link {
   flex-wrap: wrap;
 }
 
+.notice {
+  border: 1px solid var(--border);
+  background: var(--hover);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.875rem;
+}
+
+.notice h2 {
+  font-size: 1rem;
+  margin: 0 0 4px;
+}
+
+.notice p {
+  margin: 0 0 6px;
+}
+
+.notice summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.8125rem;
+}
+
+.notice ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  word-break: break-all;
+}
+
 .error {
   color: var(--error);
   font-size: 0.875rem;

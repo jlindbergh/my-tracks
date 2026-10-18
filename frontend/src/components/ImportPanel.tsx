@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'r
 import { fetchDuplicateRules, importFiles, type DuplicateRules, type ImportResult } from '../api';
 import DuplicateReview, { type ReviewItem } from './DuplicateReview';
 import DuplicateRulesInfo from './DuplicateRulesInfo';
+import NoTrackNotice, { type NoTrackItem } from './NoTrackNotice';
 
 interface Props {
   /** Called after an import that stored at least one new activity. */
@@ -117,12 +118,21 @@ export default function ImportPanel({ onImported }: Props) {
         ? [{ key: e.key, file: e.file.name, activity: e.result.activity, existing: e.result.existing }]
         : [],
     );
+  const noTrack: NoTrackItem[] = (entries ?? [])
+    .filter((e) => e.result.status === 'no_gps_track')
+    .map((e) => ({
+      key: e.key,
+      file: e.file.name,
+      name: e.result.activity?.name ?? e.file.name,
+      sport: e.result.activity?.sport ?? 'unknown',
+    }));
 
   const summary = entries && [
     `${count('imported')} imported`,
     count('already_imported') > 0 && `${count('already_imported')} already imported (exact copies)`,
     review.length > 0 && `${possibleDuplicates(review.length)} to review`,
     skipped.size > 0 && `${possibleDuplicates(skipped.size)} skipped`,
+    noTrack.length > 0 && `${noTrack.length} without GPS track`,
     failed.length > 0 && `${failed.length} failed`,
   ];
 
@@ -160,6 +170,8 @@ export default function ImportPanel({ onImported }: Props) {
           </div>
         )}
       </div>
+
+      {noTrack.length > 0 && <NoTrackNotice items={noTrack} />}
 
       {review.length > 0 && (
         <DuplicateReview
