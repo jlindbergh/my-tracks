@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"path/filepath"
 	"strings"
 
@@ -28,6 +29,10 @@ const (
 	// the DuplicateRule and was not stored. Import it again with
 	// Options.AllowDuplicates to store it anyway.
 	StatusPossibleDuplicate Status = "possible_duplicate"
+	// StatusNoGPSTrack means the file was read but has no GPS track (e.g. an
+	// indoor or treadmill activity), so there is nothing to show on the map.
+	// Activity holds its name and sport.
+	StatusNoGPSTrack Status = "no_gps_track"
 	// StatusFailed means the file could not be read.
 	StatusFailed Status = "failed"
 )
@@ -75,6 +80,12 @@ func (im *Importer) ImportGPX(ctx context.Context, userID, filename string, data
 
 	name := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
 	act, err := gpxfile.Parse(data, name)
+	var noTrack *gpxfile.NoTrackError
+	if errors.As(err, &noTrack) {
+		res.Status = StatusNoGPSTrack
+		res.Activity = &store.ActivityFacts{Name: noTrack.Name, Sport: noTrack.Sport}
+		return res, nil
+	}
 	if err != nil {
 		res.Status, res.Error = StatusFailed, err.Error()
 		return res, nil

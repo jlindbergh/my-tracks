@@ -79,6 +79,7 @@ type DuplicateRule struct {
 type ActivityFacts struct {
 	ID        string     `json:"id,omitempty"`
 	Name      string     `json:"name"`
+	Sport     string     `json:"sport"`
 	StartedAt *time.Time `json:"startedAt"`
 	DurationS *int       `json:"durationS"`
 	DistanceM float64    `json:"distanceM"`
@@ -123,7 +124,7 @@ type InsertResult struct {
 func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivity, rule *DuplicateRule) (InsertResult, error) {
 	a := na.Activity
 	wkt := a.WKT()
-	res := InsertResult{New: ActivityFacts{Name: a.Name, StartedAt: a.StartedAt, DurationS: a.DurationS}}
+	res := InsertResult{New: ActivityFacts{Name: a.Name, Sport: a.Sport, StartedAt: a.StartedAt, DurationS: a.DurationS}}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -143,7 +144,7 @@ func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivit
 	}
 
 	existing, err := scanFacts(tx.QueryRow(ctx, `
-		SELECT id, name, started_at, duration_s, distance_m
+		SELECT id, name, sport, started_at, duration_s, distance_m
 		  FROM activities
 		 WHERE user_id = $1 AND content_sha256 = $2`,
 		userID, na.ContentSHA256))
@@ -157,7 +158,7 @@ func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivit
 
 	if rule != nil && a.StartedAt != nil {
 		existing, err := scanFacts(tx.QueryRow(ctx, `
-			SELECT id, name, started_at, duration_s, distance_m
+			SELECT id, name, sport, started_at, duration_s, distance_m
 			  FROM activities
 			 WHERE user_id = $1
 			   AND started_at BETWEEN $2::timestamptz - make_interval(secs => $3)
@@ -194,11 +195,11 @@ func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivit
 	return res, nil
 }
 
-// scanFacts scans one row of id, name, started_at, duration_s, distance_m.
+// scanFacts scans one row of id, name, sport, started_at, duration_s, distance_m.
 // It returns nil if there is no row.
 func scanFacts(row pgx.Row) (*ActivityFacts, error) {
 	var f ActivityFacts
-	err := row.Scan(&f.ID, &f.Name, &f.StartedAt, &f.DurationS, &f.DistanceM)
+	err := row.Scan(&f.ID, &f.Name, &f.Sport, &f.StartedAt, &f.DurationS, &f.DistanceM)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

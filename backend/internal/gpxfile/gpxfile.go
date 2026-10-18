@@ -7,12 +7,26 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/tkrajina/gpxgo/gpx"
 )
 
-// ErrNoTrack is returned when a file has no track or route with at least two points.
-var ErrNoTrack = errors.New("gpx file contains no track with at least two points")
+// ErrNoTrack is returned when a file has no track or route with at least
+// two GPS points, e.g. an indoor or treadmill activity. The returned error is
+// a *NoTrackError; use errors.As to get the activity's name and sport.
+var ErrNoTrack = errors.New("gpx file contains no GPS track")
+
+// NoTrackError describes a file that was readable but has no GPS track.
+type NoTrackError struct {
+	Name  string
+	Sport string
+}
+
+func (e *NoTrackError) Error() string { return ErrNoTrack.Error() }
+
+// Is makes errors.Is(err, ErrNoTrack) true.
+func (e *NoTrackError) Is(target error) bool { return target == ErrNoTrack }
 
 // Activity is the parsed content of one GPX file. All tracks (or, if the
 // file has none, routes) in the file become lines of the same activity.
@@ -57,14 +71,14 @@ func Parse(data []byte, fallbackName string) (Activity, error) {
 			a.addLine(rte.Points)
 		}
 	}
-	if len(a.Lines) == 0 {
-		return Activity{}, ErrNoTrack
-	}
-
 	if a.Name == "" {
 		a.Name = fallbackName
 	}
 	a.Sport = normalizeSport(a.Sport)
+
+	if len(a.Lines) == 0 {
+		return Activity{}, &NoTrackError{Name: a.Name, Sport: a.Sport}
+	}
 
 	if tb := g.TimeBounds(); !tb.StartTime.IsZero() {
 		start := tb.StartTime.UTC()
@@ -82,12 +96,16 @@ func Parse(data []byte, fallbackName string) (Activity, error) {
 }
 
 func (a *Activity) addLine(points []gpx.GPXPoint) {
-	if len(points) < 2 {
-		return
-	}
 	line := make([]LonLat, 0, len(points))
 	for _, p := range points {
+		// Some exporters write 0,0 for points without a GPS fix.
+		if p.Latitude == 0 && p.Longitude == 0 {
+			continue
+		}
 		line = append(line, LonLat{Lon: p.Longitude, Lat: p.Latitude})
+	}
+	if len(line) < 2 {
+		return
 	}
 	a.Lines = append(a.Lines, line)
 }
@@ -133,8 +151,22 @@ var sportAliases = map[string]string{
 	"swim":            "swimming",
 }
 
+// normalizeSport lowercases a sport type, turning CamelCase ("VirtualRide",
+// as Strava writes it) and spaces into snake_case, then applies sportAliases.
 func normalizeSport(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
+	var b strings.Builder
+	prevLower := false
+	for _, r := range strings.TrimSpace(s) {
+		switch {
+		case r == ' ' || r == '-':
+			r = '_'
+		case unicode.IsUpper(r) && prevLower:
+			b.WriteByte('_')
+		}
+		prevLower = unicode.IsLower(r)
+		b.WriteRune(unicode.ToLower(r))
+	}
+	s = b.String()
 	if s == "" {
 		return "unknown"
 	}

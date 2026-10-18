@@ -67,6 +67,45 @@ func TestParseNoTrack(t *testing.T) {
 	}
 }
 
+func TestParseNoTrackReportsActivity(t *testing.T) {
+	tests := map[string]string{
+		"no segments": `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+			<trk><name>Zwift ride</name><type>VirtualRide</type></trk></gpx>`,
+		"only 0,0 points": `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+			<trk><name>Zwift ride</name><type>VirtualRide</type><trkseg>
+			<trkpt lat="0" lon="0"/><trkpt lat="0" lon="0"/><trkpt lat="0" lon="0"/>
+			</trkseg></trk></gpx>`,
+	}
+	for name, doc := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse([]byte(doc), "x")
+			var nt *NoTrackError
+			if !errors.As(err, &nt) {
+				t.Fatalf("err = %v, want *NoTrackError", err)
+			}
+			if nt.Name != "Zwift ride" || nt.Sport != "virtual_ride" {
+				t.Errorf("got Name=%q Sport=%q", nt.Name, nt.Sport)
+			}
+		})
+	}
+}
+
+func TestNormalizeSport(t *testing.T) {
+	for in, want := range map[string]string{
+		"":               "unknown",
+		" Running ":      "running",
+		"Run":            "running",
+		"VirtualRide":    "virtual_ride",
+		"indoor_cycling": "indoor_cycling",
+		"Indoor Rowing":  "indoor_rowing",
+		"9":              "running",
+	} {
+		if got := normalizeSport(in); got != want {
+			t.Errorf("normalizeSport(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestParseInvalid(t *testing.T) {
 	if _, err := Parse([]byte("not xml"), "x"); err == nil {
 		t.Error("expected an error for invalid input")

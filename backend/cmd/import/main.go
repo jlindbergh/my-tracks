@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -57,6 +58,7 @@ func run() error {
 	im := importer.New(st)
 
 	counts := map[importer.Status]int{}
+	noTrackSports := map[string]int{}
 	err = filepath.WalkDir(*dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -76,6 +78,9 @@ func run() error {
 		switch {
 		case res.Error != "":
 			fmt.Printf("%-18s %s: %s\n", res.Status, path, res.Error)
+		case res.Status == importer.StatusNoGPSTrack:
+			fmt.Printf("%-18s %s (%s)\n", res.Status, path, res.Activity.Sport)
+			noTrackSports[res.Activity.Sport]++
 		case res.Status == importer.StatusPossibleDuplicate:
 			fmt.Printf("%-18s %s: matches %q started %s\n", res.Status, path,
 				res.Existing.Name, res.Existing.StartedAt.Format(time.DateTime))
@@ -88,9 +93,17 @@ func run() error {
 		return err
 	}
 
-	fmt.Printf("\n%s: %d imported, %d already imported, %d possible duplicates, %d failed\n", u.Email,
-		counts[importer.StatusImported], counts[importer.StatusAlreadyImported],
-		counts[importer.StatusPossibleDuplicate], counts[importer.StatusFailed])
+	fmt.Printf("\n%s: %d imported, %d already imported, %d possible duplicates, %d without GPS track, %d failed\n",
+		u.Email, counts[importer.StatusImported], counts[importer.StatusAlreadyImported],
+		counts[importer.StatusPossibleDuplicate], counts[importer.StatusNoGPSTrack], counts[importer.StatusFailed])
+	if n := counts[importer.StatusNoGPSTrack]; n > 0 {
+		sports := make([]string, 0, len(noTrackSports))
+		for sport, c := range noTrackSports {
+			sports = append(sports, fmt.Sprintf("%s (%d)", sport, c))
+		}
+		slices.Sort(sports)
+		fmt.Printf("%d not imported because they have no GPS track: %s\n", n, strings.Join(sports, ", "))
+	}
 	if counts[importer.StatusPossibleDuplicate] > 0 && !*allowDuplicates {
 		fmt.Printf("Possible duplicates start within %s of an existing activity, with distance and duration within %g%%.\n"+
 			"Run again with -allow-duplicates to import them anyway.\n",
