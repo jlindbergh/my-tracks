@@ -33,7 +33,9 @@ services:
     environment:
       DATABASE_URL: postgres://mytracks_martin:${MARTIN_DB_PASSWORD:-dev-martin-pw}@db:5432/mytracks
     volumes:
-      - ./mapserver/config.yaml:/config/config.yaml:ro
+      # Mount the directory, not the file: a file mount goes stale when an
+      # editor or git replaces the file.
+      - ./mapserver:/config:ro
     depends_on:
       db:
         condition: service_healthy
@@ -63,8 +65,11 @@ services:
     environment:
       API_PROXY_TARGET: http://backend:8080
     volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/index.html:/app/index.html
+      # The whole module is mounted for hot reload, including vite.config.ts.
+      # node_modules stays the image's (installed for Linux) via an anonymous
+      # volume; ./dev.sh renews it whenever it rebuilds.
+      - ./frontend:/app
+      - /app/node_modules
     ports:
       - "127.0.0.1:5173:5173"
     depends_on:
