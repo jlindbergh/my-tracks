@@ -8,16 +8,24 @@ See [docs/tech-stack.md](docs/tech-stack.md) for the proposed tech stack and arc
 Requires Docker with Compose. Nothing else needs to be installed on the host.
 
 ```bash
-docker compose up --build
+./dev.sh
 ```
 
-Then open http://localhost:5173 and import GPX files with the button, or drag and drop them onto it.
+This rebuilds every module and recreates all containers, keeping the database. Run it again after pulling, switching branches or changing dependencies. Then open http://localhost:5173 and import GPX files with the button, or drag and drop them onto it.
 
-To batch-import a folder, put your files in [samples/](samples/) (subfolders are fine) and run:
+Other commands (`./dev.sh help` lists them all):
 
-```bash
-docker compose run --rm backend import
-```
+| Command | What it does |
+|---|---|
+| `./dev.sh down` | Stop the stack (keeps data) |
+| `./dev.sh logs [service]` | Follow logs |
+| `./dev.sh test` | Backend tests, including database tests, plus the frontend type check |
+| `./dev.sh import [-allow-duplicates]` | Batch-import GPX files from [samples/](samples/) |
+| `./dev.sh reset-db` | Delete all data and recreate the database from [postgis/init/](postgis/init/), after asking |
+
+Frontend source is mounted into its container, so edits reload live. Backend changes need `./dev.sh`.
+
+To batch-import a folder, put your files in [samples/](samples/) (subfolders are fine) and run `./dev.sh import`.
 
 Running it again is safe; see [Duplicate detection](#duplicate-detection).
 
@@ -50,12 +58,7 @@ Defaults can be overridden with environment variables or a `.env` file (see [com
 
 ### Resetting the database
 
-The SQL in [postgis/init/](postgis/init/) only runs when the database volume is first created.
-After changing it, recreate the volume (this deletes all imported data):
-
-```bash
-docker compose down -v
-```
+The SQL in [postgis/init/](postgis/init/) only runs when the database volume is first created. After changing it, run `./dev.sh reset-db`, which deletes all imported data.
 
 ## How users are kept apart
 
@@ -74,13 +77,8 @@ The default basemap is [OpenFreeMap](https://openfreemap.org/) ("Liberty" style)
 
 ## Development
 
-```bash
-# Backend tests (no local Go needed). With the stack running, this includes
-# the database tests; without TEST_DATABASE_URL they are skipped.
-docker run --rm --network my-tracks_default \
-  -e TEST_DATABASE_URL=postgres://mytracks_app:dev-app-pw@db:5432/mytracks \
-  -v "$PWD/backend":/src -w /src golang:1.25-alpine go test ./...
+`./dev.sh test` runs everything without local Go or Node. If the stack isn't running, the database tests are skipped. To work on the frontend with a local Node instead:
 
-# Frontend type check, with Node installed locally
+```bash
 cd frontend && npm install && npm run typecheck
 ```
