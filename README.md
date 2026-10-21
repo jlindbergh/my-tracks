@@ -31,6 +31,8 @@ Running it again is safe; see [Duplicate detection](#duplicate-detection).
 
 Files without a GPS track (indoor rides, treadmill runs, gym sessions) aren't imported, since there is nothing to show on the map. The UI and the batch command report how many were skipped and their activity types. Points at 0,0 count as missing a GPS fix.
 
+Files that can't be read are reported as failed and nothing from them is stored, while the rest of the batch is imported as usual. Besides files that aren't valid GPX, this covers points whose latitude or longitude isn't a number or is outside -90 to 90 / -180 to 180, and timestamps more than 68 years apart. The UI lists each failed file with the reason, for example which point is wrong, and so does the batch command.
+
 ### Duplicate detection
 
 Each import is checked against the user's own activities (never other users'):
