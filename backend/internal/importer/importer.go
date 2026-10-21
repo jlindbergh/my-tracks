@@ -48,9 +48,14 @@ const (
 	// indoor or treadmill activity), so there is nothing to show on the map.
 	// Activity holds its name and sport.
 	StatusNoGPSTrack Status = "no_gps_track"
-	// StatusFailed means the file could not be read.
+	// StatusFailed means the file could not be read, or could not be stored
+	// because of a server error (see ImportGPX).
 	StatusFailed Status = "failed"
 )
+
+// storeFailedMessage is what users are told about a file that could not be
+// stored. The cause is for the server log, not for them.
+const storeFailedMessage = "could not be saved because of a server error; try importing it again"
 
 // Result describes what happened to one file.
 type Result struct {
@@ -74,19 +79,27 @@ type Options struct {
 	AllowDuplicates bool
 }
 
+// Store stores activities; *store.Store implements it.
+type Store interface {
+	InsertActivity(ctx context.Context, userID string, na store.NewActivity, rule *activity.DuplicateRule) (store.InsertResult, error)
+}
+
 // Importer stores imported activities.
 type Importer struct {
-	store *store.Store
+	store Store
 }
 
 // New returns an Importer that writes to s.
-func New(s *store.Store) *Importer {
+func New(s Store) *Importer {
 	return &Importer{store: s}
 }
 
 // ImportGPX parses a GPX file and stores it as an activity owned by userID.
-// Parse problems are reported in the Result; only failures to talk to the
-// database are returned as errors.
+// Problems with the file are reported in the Result, with a nil error.
+//
+// If the activity cannot be stored, ImportGPX returns the error together with
+// a StatusFailed Result that tells the user to try again, so that callers can
+// log the error and still report the file, then go on with the next one.
 func (im *Importer) ImportGPX(ctx context.Context, userID, filename string, data []byte, opts Options) (Result, error) {
 	res := Result{File: filename}
 
@@ -120,7 +133,8 @@ func (im *Importer) ImportGPX(ctx context.Context, userID, filename string, data
 		ContentSHA256:  hex.EncodeToString(sum[:]),
 	}, rule)
 	if err != nil {
-		return Result{}, err
+		res.Status, res.Error = StatusFailed, storeFailedMessage
+		return res, fmt.Errorf("store activity: %w", err)
 	}
 
 	res.Activity, res.Existing, res.Comparison = &ins.New, ins.Existing, ins.Comparison
@@ -132,7 +146,8 @@ func (im *Importer) ImportGPX(ctx context.Context, userID, filename string, data
 	case store.PossibleDuplicate:
 		res.Status = StatusPossibleDuplicate
 	default:
-		return Result{}, fmt.Errorf("unexpected insert status %v", ins.Status)
+		res = Result{File: filename, Status: StatusFailed, Error: storeFailedMessage}
+		return res, fmt.Errorf("store activity: unexpected insert status %v", ins.Status)
 	}
 	return res, nil
 }

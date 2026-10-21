@@ -75,6 +75,9 @@ func (s *Server) listActivities(w http.ResponseWriter, r *http.Request) {
 // importActivities accepts a multipart form with one or more "files" fields
 // and returns one result per file, in upload order. With
 // ?allowDuplicates=true, possible duplicates are stored instead of reported.
+//
+// Each file is stored on its own, so a file that cannot be stored is
+// reported as failed and the others are still imported and reported.
 func (s *Server) importActivities(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.UserFrom(r.Context())
 	opts := importer.Options{AllowDuplicates: r.URL.Query().Get("allowDuplicates") == "true"}
@@ -110,8 +113,11 @@ func (s *Server) importActivities(w http.ResponseWriter, r *http.Request) {
 
 		res, err := s.importer.ImportGPX(r.Context(), u.ID, part.FileName(), data, opts)
 		if err != nil {
-			s.serverError(w, r, err)
-			return
+			if r.Context().Err() != nil {
+				// The client is gone; nobody will read the results.
+				return
+			}
+			s.log.ErrorContext(r.Context(), "import file", "err", err)
 		}
 		results = append(results, res)
 	}
