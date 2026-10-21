@@ -116,7 +116,7 @@ export default function ImportPanel({ onImported }: Props) {
     .map((e) => ({
       key: e.key,
       file: e.file.name,
-      name: e.result.activity?.name ?? e.file.name,
+      name: e.result.activity?.name ?? '',
       sport: e.result.activity?.sport ?? 'unknown',
     }));
 

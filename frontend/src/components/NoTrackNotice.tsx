@@ -4,6 +4,7 @@ import { formatCount, plural } from '../plural';
 export interface NoTrackItem {
   key: string;
   file: string;
+  /** The activity name written in the file, or "" if it has none. */
   name: string;
   sport: string;
 }
@@ -43,7 +44,7 @@ export default function NoTrackNotice({ items }: Props) {
           {items.map((item) => (
             <li key={item.key}>
               {item.file}
-              {item.name !== item.file.replace(/\.gpx$/i, '') && <span className="hint"> – {item.name}</span>}
+              {item.name && <span className="hint"> – {item.name}</span>}
               <span className="hint"> · {sportLabel(item.sport)}</span>
             </li>
           ))}

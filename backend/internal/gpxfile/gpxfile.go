@@ -21,6 +21,8 @@ var ErrNoTrack = errors.New("gpx file contains no GPS track")
 
 // NoTrackError describes a file that was readable but has no GPS track.
 type NoTrackError struct {
+	// Name is the activity name written in the file, or "" if it has none.
+	// The fallback name is not used, since nothing is stored.
 	Name  string
 	Sport string
 }
@@ -73,13 +75,13 @@ func Parse(data []byte, fallbackName string) (Activity, error) {
 			a.addLine(rte.Points)
 		}
 	}
-	if a.Name == "" {
-		a.Name = fallbackName
-	}
 	a.Sport = normalizeSport(a.Sport)
 
 	if len(a.Lines) == 0 {
 		return Activity{}, &NoTrackError{Name: a.Name, Sport: a.Sport}
+	}
+	if a.Name == "" {
+		a.Name = fallbackName
 	}
 
 	if tb := g.TimeBounds(); !tb.StartTime.IsZero() {

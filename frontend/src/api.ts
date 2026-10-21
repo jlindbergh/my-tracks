@@ -30,7 +30,10 @@ export interface ImportResult {
   status: 'imported' | 'already_imported' | 'possible_duplicate' | 'no_gps_track' | 'failed';
   activityId?: string;
   error?: string;
-  /** The activity read from the file. For no_gps_track only name and sport are meaningful. */
+  /**
+   * The activity read from the file. For no_gps_track only name and sport are
+   * meaningful, and name is "" if the file has none.
+   */
   activity?: ActivityFacts;
   /** The already imported activity it matched. */
   existing?: ActivityFacts;
