@@ -6,7 +6,8 @@ cd "$(dirname "$0")"
 
 FRONTEND_URL="http://localhost:5173"
 BACKEND_URL="http://localhost:8080"
-COMPOSE_NETWORK="my-tracks_default"
+# The network with the database; see compose.yaml.
+COMPOSE_NETWORK="my-tracks_data"
 # Go module cache shared by test runs, so dependencies are downloaded once.
 GO_CACHE_VOLUME="my-tracks-go-cache"
 TEST_DATABASE_URL="postgres://mytracks_app:${APP_DB_PASSWORD:-dev-app-pw}@db:5432/mytracks"

@@ -5,6 +5,11 @@
 # Only the frontend, the backend and (for psql) the database are published,
 # and only on 127.0.0.1. Martin stays on the internal network: tiles must go
 # through the backend, which decides whose data they contain.
+#
+# Two networks keep the frontend away from the data: "data" holds the
+# database, Martin and the backend; "web" holds the backend and the frontend.
+# The frontend container runs third-party npm code and must not be able to
+# reach Martin, which serves any user's tiles to whoever asks.
 
 name: my-tracks
 
@@ -26,6 +31,7 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+    networks: [data]
 
   martin:
     image: ghcr.io/maplibre/martin:v0.18.1
@@ -36,6 +42,7 @@ services:
       # Mount the directory, not the file: a file mount goes stale when an
       # editor or git replaces the file.
       - ./mapserver:/config:ro
+    networks: [data]
     depends_on:
       db:
         condition: service_healthy
@@ -54,6 +61,7 @@ services:
       - ./samples:/samples:ro
     ports:
       - "127.0.0.1:8080:8080"
+    networks: [data, web]
     depends_on:
       db:
         condition: service_healthy
@@ -72,8 +80,13 @@ services:
       - /app/node_modules
     ports:
       - "127.0.0.1:5173:5173"
+    networks: [web]
     depends_on:
       - backend
+
+networks:
+  data:
+  web:
 
 volumes:
   pgdata:
