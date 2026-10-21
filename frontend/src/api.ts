@@ -45,8 +45,23 @@ export interface DuplicateRules {
   relativeTolerance: number;
 }
 
-/** Absolute URL template for the signed-in user's activity tiles. */
-export const tilesUrl = `${window.location.origin}/api/tiles/{z}/{x}/{y}`;
+/** What the frontend needs to know about the backend; see backend/internal/api/config.go. */
+export interface AppConfig {
+  tiles: {
+    /** URL template for the signed-in user's activity tiles, relative to the origin. */
+    url: string;
+    sourceLayer: string;
+    minZoom: number;
+    maxZoom: number;
+  };
+  import: {
+    /** Lowercase, with the dot, e.g. ".gpx". */
+    acceptedExtensions: string[];
+    duplicateRule: DuplicateRules;
+  };
+  /** The sport ids the backend recognizes. */
+  sports: string[];
+}
 
 /** Fetches JSON from url. what names the data in the error message. */
 async function getJSON<T>(url: string, what: string, signal?: AbortSignal): Promise<T> {
@@ -59,8 +74,8 @@ export function fetchActivities(signal?: AbortSignal): Promise<Activity[]> {
   return getJSON('/api/activities', 'activities', signal);
 }
 
-export function fetchDuplicateRules(signal?: AbortSignal): Promise<DuplicateRules> {
-  return getJSON('/api/import/rules', 'import rules', signal);
+export function fetchConfig(signal?: AbortSignal): Promise<AppConfig> {
+  return getJSON('/api/config', 'configuration', signal);
 }
 
 /**

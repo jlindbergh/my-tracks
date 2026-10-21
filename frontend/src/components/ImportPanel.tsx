@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
-import { fetchDuplicateRules, importFiles, type DuplicateRules, type ImportResult } from '../api';
+import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { importFiles, type ImportResult } from '../api';
+import { useConfig } from '../config';
 import DuplicateReview, { type ReviewItem } from './DuplicateReview';
 import DuplicateRulesInfo from './DuplicateRulesInfo';
 import NoTrackNotice, { type NoTrackItem } from './NoTrackNotice';
@@ -26,7 +27,7 @@ function possibleDuplicates(n: number): string {
 
 export default function ImportPanel({ onImported }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [rules, setRules] = useState<DuplicateRules | null>(null);
+  const extensions = useConfig().import.acceptedExtensions;
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [entries, setEntries] = useState<Entry[] | null>(null);
@@ -34,16 +35,6 @@ export default function ImportPanel({ onImported }: Props) {
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchDuplicateRules(controller.signal)
-      .then(setRules)
-      .catch(() => {
-        // The explanation falls back to approximate wording.
-      });
-    return () => controller.abort();
-  }, []);
 
   /** Uploads files and hands the results, in upload order, to onResults. */
   async function runImport(files: File[], allowDuplicates: boolean, onResults: (results: ImportResult[]) => void) {
@@ -61,16 +52,16 @@ export default function ImportPanel({ onImported }: Props) {
   }
 
   async function upload(files: File[]) {
-    const gpx = files.filter((f) => f.name.toLowerCase().endsWith('.gpx'));
-    if (gpx.length === 0) {
-      setError('Only .gpx files can be imported for now.');
+    const accepted = files.filter((f) => extensions.some((ext) => f.name.toLowerCase().endsWith(ext)));
+    if (accepted.length === 0) {
+      setError(`Only ${extensions.join(', ')} files can be imported for now.`);
       return;
     }
     setEntries(null);
     setSkipped(new Set());
     setSelected(new Set());
-    await runImport(gpx, false, (results) => {
-      setEntries(results.map((result, i) => ({ key: String(nextKey++), file: gpx[i], result })));
+    await runImport(accepted, false, (results) => {
+      setEntries(results.map((result, i) => ({ key: String(nextKey++), file: accepted[i], result })));
     });
   }
 
@@ -149,12 +140,12 @@ export default function ImportPanel({ onImported }: Props) {
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
       >
-        <input ref={inputRef} type="file" accept=".gpx" multiple hidden onChange={handleChange} />
+        <input ref={inputRef} type="file" accept={extensions.join(',')} multiple hidden onChange={handleChange} />
         <button type="button" className="primary" disabled={busy} onClick={() => inputRef.current?.click()}>
           {busy ? 'Importing…' : 'Import GPX files'}
         </button>
         <span className="hint">or drop files here</span>
-        <DuplicateRulesInfo rules={rules} />
+        <DuplicateRulesInfo />
 
         {error && <p className="error">{error}</p>}
         {summary && (

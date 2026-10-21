@@ -8,7 +8,7 @@ import Map, {
   type MapLayerMouseEvent,
   type MapRef,
 } from 'react-map-gl/maplibre';
-import { tilesUrl } from '../api';
+import { useConfig } from '../config';
 import { defaultSportColor, formatDate, formatDistance, sportColors } from '../format';
 
 // OpenFreeMap: free vector basemap, no API key. Data © OpenStreetMap
@@ -31,7 +31,6 @@ const activitiesLayerId = 'activities-line';
 const activitiesLayer: LayerProps = {
   id: activitiesLayerId,
   type: 'line',
-  'source-layer': 'activities',
   layout: lineLayout,
   paint: { 'line-color': lineColor, 'line-width': lineWidth, 'line-opacity': 0.8 },
 };
@@ -55,6 +54,7 @@ interface Props {
 }
 
 export default function TrackMap({ mapRef, dataVersion, selectedId, onSelect, onLoad }: Props) {
+  const { tiles } = useConfig();
   const [popup, setPopup] = useState<PopupInfo | null>(null);
   const [cursor, setCursor] = useState<string>('');
 
@@ -91,12 +91,20 @@ export default function TrackMap({ mapRef, dataVersion, selectedId, onSelect, on
     >
       <NavigationControl position="top-right" />
       {/* Keyed on dataVersion so new imports show up without a page reload. */}
-      <Source key={dataVersion} id="activities" type="vector" tiles={[tilesUrl]} minzoom={0} maxzoom={22}>
-        <Layer {...activitiesLayer} />
+      <Source
+        key={dataVersion}
+        id="activities"
+        type="vector"
+        // MapLibre needs an absolute URL. Not new URL(): it would escape the {z}/{x}/{y} braces.
+        tiles={[`${window.location.origin}${tiles.url}`]}
+        minzoom={tiles.minZoom}
+        maxzoom={tiles.maxZoom}
+      >
+        <Layer {...activitiesLayer} source-layer={tiles.sourceLayer} />
         <Layer
           id="activities-selected"
           type="line"
-          source-layer="activities"
+          source-layer={tiles.sourceLayer}
           filter={['==', ['get', 'id'], selectedId ?? '']}
           layout={lineLayout}
           paint={{ 'line-color': '#111', 'line-width': 6, 'line-opacity': 0.9 }}

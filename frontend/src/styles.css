@@ -269,6 +269,11 @@ button.link {
   margin: 0;
 }
 
+/* Shown instead of the app, e.g. when the configuration cannot be loaded. */
+.app-message {
+  padding: 16px;
+}
+
 .activity-list {
   list-style: none;
   margin: 0;
