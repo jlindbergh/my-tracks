@@ -15,3 +15,16 @@ The API types in [frontend/src/api.ts](frontend/src/api.ts) are written by hand 
 - Generate them from the Go structs, for example with [tygo](https://github.com/gzuidhof/tygo) added as a Go tool in `backend/go.mod`.
 - Add `./dev.sh gen`, run in a Go container since nothing is installed on the host, and make `./dev.sh test` fail when the generated files are out of date.
 - Check how `*time.Time`, pointers and embedded structs come out; struct tags may be needed.
+
+## Code quality
+
+Found in a review; none of these is a known bug today.
+
+- **`store.InsertActivity` does too much.** It locks, finds the same file, inserts, decides on duplicates and rolls back ([store.go](backend/internal/store/store.go)). Move the duplicate decision out of the store. Replace the `nil` rule that means "allow duplicates" with an explicit option, and use one set of status names instead of both `Inserted`/`SameFile`/`PossibleDuplicate` and `imported`/`already_imported`/`possible_duplicate`.
+- **`ImportPanel` does too much, and pairs results with files by index** ([ImportPanel.tsx](frontend/src/components/ImportPanel.tsx)). Pair them by the `file` the backend returns, or by a client id, since the backend skips parts without a file name. Use `setEntries(prev => …)` after `await`, and ignore drops while an import is running. Split the derived lists out of the component.
+- **The tile SQL repeats magic numbers.** The extent `4096` and the buffer `64` appear three times in [030_tiles.sql](postgis/init/030_tiles.sql), and line 47 converts the buffer to metres. Name them and explain the conversion, so the bbox filter cannot drift from `ST_AsMVTGeom`.
+- Smaller items:
+  - `run()` in [cmd/import/main.go](backend/cmd/import/main.go) does four things.
+  - The `as unknown as` casts in [TrackMap.tsx](frontend/src/components/TrackMap.tsx) have no comment.
+  - `activity.Facts` is a vague name.
+  - `format.ts` also holds the sport colors.
