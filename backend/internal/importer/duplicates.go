@@ -3,7 +3,7 @@ package importer
 import (
 	"time"
 
-	"github.com/jlindbergh/my-tracks/backend/internal/store"
+	"github.com/jlindbergh/my-tracks/backend/internal/activity"
 )
 
 // Duplicate detection.
@@ -27,7 +27,7 @@ import (
 // Possible duplicates are not stored unless the user explicitly asks for it.
 // Files without timestamps can only be detected as already imported.
 //
-// The frontend reads these values from GET /api/import/rules, so changing
+// The frontend reads these values from GET /api/config, so changing
 // them here also changes what users are told.
 const (
 	// DuplicateStartTolerance is how far apart two start times may be.
@@ -38,8 +38,8 @@ const (
 	DuplicateRelativeTolerance = 0.02
 )
 
-// DuplicateRule is the rule above, in the form the store uses.
-var DuplicateRule = store.DuplicateRule{
+// DuplicateRule is the rule above.
+var DuplicateRule = activity.DuplicateRule{
 	StartTolerance:    DuplicateStartTolerance,
 	RelativeTolerance: DuplicateRelativeTolerance,
 }

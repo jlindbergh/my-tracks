@@ -4,6 +4,7 @@ import { fetchActivities, type Activity } from './api';
 import ActivityList from './components/ActivityList';
 import ImportPanel from './components/ImportPanel';
 import TrackMap from './components/TrackMap';
+import { formatError } from './format';
 
 type BBox = Activity['bbox'];
 
@@ -40,7 +41,7 @@ export default function App() {
         setPendingFit(unionBBox(list));
       })
       .catch((e: unknown) => {
-        if (!controller.signal.aborted) setLoadError(e instanceof Error ? e.message : String(e));
+        if (!controller.signal.aborted) setLoadError(formatError(e));
       });
     return () => controller.abort();
   }, [dataVersion]);
@@ -85,6 +86,7 @@ export default function App() {
       <main className="map">
         <TrackMap
           mapRef={mapRef}
+          activities={activities}
           dataVersion={dataVersion}
           selectedId={selectedId}
           onSelect={setSelectedId}

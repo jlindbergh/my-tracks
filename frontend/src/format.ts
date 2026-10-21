@@ -1,3 +1,8 @@
+/** The message to show for a caught error. */
+export function formatError(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 export function formatDistance(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
 }
@@ -9,10 +14,9 @@ export function formatDuration(s: number | null): string {
   return h > 0 ? `${h} h ${m} min` : `${m} min`;
 }
 
-export function formatDate(value: string | number | null): string {
+export function formatDate(value: string | null): string {
   if (value == null) return 'Unknown date';
-  const d = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 export function formatDateTime(value: string | null): string {
@@ -27,26 +31,32 @@ export function formatDateTime(value: string | null): string {
   });
 }
 
-/** Turns a sport id like "virtual_ride" into "Virtual ride". */
-export function formatSport(sport: string): string {
-  const words = sport.replace(/_/g, ' ');
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
 export function formatPercent(fraction: number): string {
   return `${Number((fraction * 100).toFixed(1))}%`;
 }
 
-/** Line colors per sport, shared by the map and the activity list. */
-export const sportColors: Record<string, string> = {
-  running: '#e4572e',
-  cycling: '#2e86ab',
-  walking: '#76b041',
-  hiking: '#a1662f',
-  swimming: '#17bebb',
+/**
+ * How the sports we have a style for are shown, by sport id. The backend lists
+ * the ids it recognizes in GET /api/config; any other sport gets
+ * defaultSportColor and a label made from its id.
+ */
+export const sportStyles: Record<string, { label: string; color: string }> = {
+  running: { label: 'Running', color: '#e4572e' },
+  cycling: { label: 'Cycling', color: '#2e86ab' },
+  walking: { label: 'Walking', color: '#76b041' },
+  hiking: { label: 'Hiking', color: '#a1662f' },
+  swimming: { label: 'Swimming', color: '#17bebb' },
 };
 export const defaultSportColor = '#7d5ba6';
 
 export function sportColor(sport: string): string {
-  return sportColors[sport] ?? defaultSportColor;
+  return sportStyles[sport]?.color ?? defaultSportColor;
+}
+
+/** The sport's label, or one made from its id, e.g. "Virtual ride" for "virtual_ride". */
+export function sportLabel(sport: string): string {
+  const style = sportStyles[sport];
+  if (style) return style.label;
+  const words = sport.replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }

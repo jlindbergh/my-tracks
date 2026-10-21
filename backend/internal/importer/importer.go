@@ -7,15 +7,30 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/jlindbergh/my-tracks/backend/internal/activity"
 	"github.com/jlindbergh/my-tracks/backend/internal/gpxfile"
 	"github.com/jlindbergh/my-tracks/backend/internal/store"
 )
 
 // MaxFileSize is the largest file accepted for import.
 const MaxFileSize = 50 << 20
+
+// AcceptedExtensions returns the extensions of the files that can be imported.
+func AcceptedExtensions() []string {
+	return []string{".gpx"}
+}
+
+// Accepts reports whether filename has one of the AcceptedExtensions,
+// ignoring case.
+func Accepts(filename string) bool {
+	ext := filepath.Ext(filename)
+	return slices.ContainsFunc(AcceptedExtensions(), func(e string) bool { return strings.EqualFold(e, ext) })
+}
 
 // Status is the outcome of importing one file.
 type Status string
@@ -44,10 +59,12 @@ type Result struct {
 	ActivityID string `json:"activityId,omitempty"`
 	Error      string `json:"error,omitempty"`
 	// Activity is the activity read from the file.
-	Activity *store.ActivityFacts `json:"activity,omitempty"`
+	Activity *activity.Facts `json:"activity,omitempty"`
 	// Existing is the stored activity this file matched, for
 	// already_imported and possible_duplicate.
-	Existing *store.ActivityFacts `json:"existing,omitempty"`
+	Existing *activity.Facts `json:"existing,omitempty"`
+	// Comparison is how Activity and Existing differ, for possible_duplicate.
+	Comparison *activity.Comparison `json:"comparison,omitempty"`
 }
 
 // Options control an import.
@@ -83,7 +100,7 @@ func (im *Importer) ImportGPX(ctx context.Context, userID, filename string, data
 	var noTrack *gpxfile.NoTrackError
 	if errors.As(err, &noTrack) {
 		res.Status = StatusNoGPSTrack
-		res.Activity = &store.ActivityFacts{Name: noTrack.Name, Sport: noTrack.Sport}
+		res.Activity = &activity.Facts{Name: noTrack.Name, Sport: noTrack.Sport}
 		return res, nil
 	}
 	if err != nil {
@@ -106,7 +123,7 @@ func (im *Importer) ImportGPX(ctx context.Context, userID, filename string, data
 		return Result{}, err
 	}
 
-	res.Activity, res.Existing = &ins.New, ins.Existing
+	res.Activity, res.Existing, res.Comparison = &ins.New, ins.Existing, ins.Comparison
 	switch ins.Status {
 	case store.Inserted:
 		res.Status, res.ActivityID = StatusImported, ins.New.ID
@@ -114,6 +131,8 @@ func (im *Importer) ImportGPX(ctx context.Context, userID, filename string, data
 		res.Status = StatusAlreadyImported
 	case store.PossibleDuplicate:
 		res.Status = StatusPossibleDuplicate
+	default:
+		return Result{}, fmt.Errorf("unexpected insert status %v", ins.Status)
 	}
 	return res, nil
 }

@@ -70,16 +70,21 @@ cmd_up() {
   log "Ready: open $FRONTEND_URL"
 }
 
+# run_backend_tests [docker run options...]: vets and tests the backend in a Go container.
+run_backend_tests() {
+  docker run --rm "$@" -v "$PWD/backend":/src -v "$GO_CACHE_VOLUME":/go/pkg/mod -w /src \
+    golang:1.25-alpine sh -c 'go vet ./... && go test ./...'
+}
+
 cmd_test() {
   require_docker
   log "Backend tests"
   if docker network inspect "$COMPOSE_NETWORK" >/dev/null 2>&1 \
     && [ "$(docker compose ps --status running --quiet db)" != "" ]; then
-    docker run --rm --network "$COMPOSE_NETWORK" -e TEST_DATABASE_URL="$TEST_DATABASE_URL" \
-      -v "$PWD/backend":/src -v "$GO_CACHE_VOLUME":/go/pkg/mod -w /src golang:1.25-alpine sh -c 'go vet ./... && go test ./...'
+    run_backend_tests --network "$COMPOSE_NETWORK" -e TEST_DATABASE_URL="$TEST_DATABASE_URL"
   else
     echo "    The database isn't running, so database tests are skipped (run ./dev.sh up first)."
-    docker run --rm -v "$PWD/backend":/src -v "$GO_CACHE_VOLUME":/go/pkg/mod -w /src golang:1.25-alpine sh -c 'go vet ./... && go test ./...'
+    run_backend_tests
   fi
   log "Frontend type check"
   docker compose run --rm --no-deps frontend npm run typecheck

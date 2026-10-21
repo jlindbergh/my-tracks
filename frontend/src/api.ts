@@ -1,15 +1,4 @@
-export interface Activity {
-  id: string;
-  name: string;
-  sport: string;
-  startedAt: string | null;
-  durationS: number | null;
-  distanceM: number;
-  /** [west, south, east, north] in WGS 84. */
-  bbox: [number, number, number, number];
-}
-
-/** The values used to tell activities apart. */
+/** The values used to tell activities apart; activity.Facts in the backend. */
 export interface ActivityFacts {
   id?: string;
   name: string;
@@ -19,15 +8,37 @@ export interface ActivityFacts {
   distanceM: number;
 }
 
+/** A stored activity; activity.Summary in the backend. */
+export interface Activity extends ActivityFacts {
+  id: string;
+  /** [west, south, east, north] in WGS 84. */
+  bbox: [number, number, number, number];
+}
+
+/** How two activities differ, as computed by the backend. */
+export interface Comparison {
+  /** Seconds between the start times, or null if either is unknown. */
+  startDiffS: number | null;
+  /** Fraction of the longer distance. */
+  distanceDiff: number;
+  /** Fraction of the longer duration, or null if either is unknown. */
+  durationDiff: number | null;
+}
+
 export interface ImportResult {
   file: string;
   status: 'imported' | 'already_imported' | 'possible_duplicate' | 'no_gps_track' | 'failed';
   activityId?: string;
   error?: string;
-  /** The activity read from the file. For no_gps_track only name and sport are meaningful. */
+  /**
+   * The activity read from the file. For no_gps_track only name and sport are
+   * meaningful, and name is "" if the file has none.
+   */
   activity?: ActivityFacts;
   /** The already imported activity it matched. */
   existing?: ActivityFacts;
+  /** How activity and existing differ, for possible_duplicate. */
+  comparison?: Comparison;
 }
 
 /** How the backend detects duplicates; see backend/internal/importer/duplicates.go. */
@@ -37,19 +48,37 @@ export interface DuplicateRules {
   relativeTolerance: number;
 }
 
-/** Absolute URL template for the signed-in user's activity tiles. */
-export const tilesUrl = `${window.location.origin}/api/tiles/{z}/{x}/{y}`;
-
-export async function fetchActivities(signal?: AbortSignal): Promise<Activity[]> {
-  const res = await fetch('/api/activities', { signal });
-  if (!res.ok) throw new Error(`Loading activities failed (${res.status})`);
-  return res.json();
+/** What the frontend needs to know about the backend; see backend/internal/api/config.go. */
+export interface AppConfig {
+  tiles: {
+    /** URL template for the signed-in user's activity tiles, relative to the origin. */
+    url: string;
+    sourceLayer: string;
+    minZoom: number;
+    maxZoom: number;
+  };
+  import: {
+    /** Lowercase, with the dot, e.g. ".gpx". */
+    acceptedExtensions: string[];
+    duplicateRule: DuplicateRules;
+  };
+  /** The sport ids the backend recognizes. */
+  sports: string[];
 }
 
-export async function fetchDuplicateRules(signal?: AbortSignal): Promise<DuplicateRules> {
-  const res = await fetch('/api/import/rules', { signal });
-  if (!res.ok) throw new Error(`Loading import rules failed (${res.status})`);
-  return res.json();
+/** Fetches JSON from url. what names the data in the error message. */
+async function getJSON<T>(url: string, what: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`Loading ${what} failed (${res.status})`);
+  return res.json() as Promise<T>;
+}
+
+export function fetchActivities(signal?: AbortSignal): Promise<Activity[]> {
+  return getJSON('/api/activities', 'activities', signal);
+}
+
+export function fetchConfig(signal?: AbortSignal): Promise<AppConfig> {
+  return getJSON('/api/config', 'configuration', signal);
 }
 
 /**

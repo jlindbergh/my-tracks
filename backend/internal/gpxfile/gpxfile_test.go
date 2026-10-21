@@ -62,8 +62,13 @@ func TestParseNoTrack(t *testing.T) {
 	doc := `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>
 		<trkpt lat="1" lon="2"/>
 	</trkseg></trk></gpx>`
-	if _, err := Parse([]byte(doc), "x"); !errors.Is(err, ErrNoTrack) {
-		t.Errorf("err = %v, want ErrNoTrack", err)
+	_, err := Parse([]byte(doc), "x")
+	if !errors.Is(err, ErrNoTrack) {
+		t.Fatalf("err = %v, want ErrNoTrack", err)
+	}
+	var nt *NoTrackError
+	if errors.As(err, &nt) && nt.Name != "" {
+		t.Errorf("Name = %q, want \"\": the fallback name is not used without a track", nt.Name)
 	}
 }
 

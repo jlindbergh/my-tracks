@@ -8,11 +8,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jlindbergh/my-tracks/backend/internal/activity"
 	"github.com/jlindbergh/my-tracks/backend/internal/gpxfile"
 )
 
@@ -67,24 +67,6 @@ type NewActivity struct {
 	ContentSHA256  string
 }
 
-// DuplicateRule decides when an activity is a possible duplicate of another
-// one by the same user: start times within StartTolerance, and distance and
-// duration within RelativeTolerance (a fraction) of the larger value.
-type DuplicateRule struct {
-	StartTolerance    time.Duration
-	RelativeTolerance float64
-}
-
-// ActivityFacts are the values of an activity used to identify it.
-type ActivityFacts struct {
-	ID        string     `json:"id,omitempty"`
-	Name      string     `json:"name"`
-	Sport     string     `json:"sport"`
-	StartedAt *time.Time `json:"startedAt"`
-	DurationS *int       `json:"durationS"`
-	DistanceM float64    `json:"distanceM"`
-}
-
 // InsertStatus is the outcome of InsertActivity.
 type InsertStatus int
 
@@ -113,18 +95,19 @@ func (s InsertStatus) String() string {
 type InsertResult struct {
 	Status InsertStatus
 	// New describes the activity that was to be inserted. Its ID is set if it was.
-	New ActivityFacts
+	New activity.Facts
 	// Existing is the already stored activity it matched, if any.
-	Existing *ActivityFacts
+	Existing *activity.Facts
+	// Comparison is how New and Existing differ, for PossibleDuplicate.
+	Comparison *activity.Comparison
 }
 
 // InsertActivity stores an activity for userID unless the user already has
 // it. Byte-identical files are always rejected. Other activities are checked
 // against rule; pass a nil rule to store possible duplicates anyway.
-func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivity, rule *DuplicateRule) (InsertResult, error) {
+func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivity, rule *activity.DuplicateRule) (InsertResult, error) {
 	a := na.Activity
-	wkt := a.WKT()
-	res := InsertResult{New: ActivityFacts{Name: a.Name, Sport: a.Sport, StartedAt: a.StartedAt, DurationS: a.DurationS}}
+	res := InsertResult{New: activity.Facts{Name: a.Name, Sport: a.Sport, StartedAt: a.StartedAt, DurationS: a.DurationS}}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -138,13 +121,8 @@ func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivit
 		return InsertResult{}, fmt.Errorf("lock user imports: %w", err)
 	}
 
-	if err := tx.QueryRow(ctx, `SELECT ST_Length(ST_GeomFromText($1, 4326)::geography)`, wkt).
-		Scan(&res.New.DistanceM); err != nil {
-		return InsertResult{}, fmt.Errorf("measure activity: %w", err)
-	}
-
 	existing, err := scanFacts(tx.QueryRow(ctx, `
-		SELECT id, name, sport, started_at, duration_s, distance_m
+		SELECT `+factsColumns+`
 		  FROM activities
 		 WHERE user_id = $1 AND content_sha256 = $2`,
 		userID, na.ContentSHA256))
@@ -152,42 +130,37 @@ func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivit
 		return InsertResult{}, fmt.Errorf("find same file: %w", err)
 	}
 	if existing != nil {
+		// A byte-identical file has the same track, and so the same distance.
+		res.New.DistanceM = existing.DistanceM
 		res.Status, res.Existing = SameFile, existing
 		return res, nil
 	}
 
-	if rule != nil && a.StartedAt != nil {
-		existing, err := scanFacts(tx.QueryRow(ctx, `
-			SELECT id, name, sport, started_at, duration_s, distance_m
-			  FROM activities
-			 WHERE user_id = $1
-			   AND started_at BETWEEN $2::timestamptz - make_interval(secs => $3)
-			                      AND $2::timestamptz + make_interval(secs => $3)
-			   AND abs(distance_m - $5) <= $4 * greatest(distance_m, $5)
-			   AND (duration_s IS NULL OR $6::integer IS NULL
-			        OR abs(duration_s - $6) <= $4 * greatest(duration_s, $6))
-			 ORDER BY abs(extract(epoch FROM started_at - $2::timestamptz))
-			 LIMIT 1`,
-			userID, a.StartedAt, rule.StartTolerance.Seconds(), rule.RelativeTolerance,
-			res.New.DistanceM, a.DurationS))
-		if err != nil {
-			return InsertResult{}, fmt.Errorf("find possible duplicate: %w", err)
-		}
-		if existing != nil {
-			res.Status, res.Existing = PossibleDuplicate, existing
-			return res, nil
-		}
-	}
-
+	// Insert before looking for duplicates: distance_m is a generated column,
+	// so the database is the only place that measures activities. A possible
+	// duplicate is rolled back.
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO activities
 			(user_id, name, sport, started_at, duration_s, source, source_filename, content_sha256, geom)
 		VALUES ($1, $2, $3, $4, $5, 'gpx', $6, $7, ST_GeomFromText($8, 4326))
-		RETURNING id`,
-		userID, a.Name, a.Sport, a.StartedAt, a.DurationS, na.SourceFilename, na.ContentSHA256, wkt,
-	).Scan(&res.New.ID); err != nil {
+		RETURNING id, distance_m`,
+		userID, a.Name, a.Sport, a.StartedAt, a.DurationS, na.SourceFilename, na.ContentSHA256, a.WKT(),
+	).Scan(&res.New.ID, &res.New.DistanceM); err != nil {
 		return InsertResult{}, fmt.Errorf("insert activity: %w", err)
 	}
+
+	if rule != nil {
+		existing, cmp, err := findDuplicate(ctx, tx, userID, res.New, *rule)
+		if err != nil {
+			return InsertResult{}, err
+		}
+		if existing != nil {
+			res.New.ID = ""
+			res.Status, res.Existing, res.Comparison = PossibleDuplicate, existing, &cmp
+			return res, nil
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return InsertResult{}, fmt.Errorf("commit import: %w", err)
 	}
@@ -195,11 +168,56 @@ func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivit
 	return res, nil
 }
 
-// scanFacts scans one row of id, name, sport, started_at, duration_s, distance_m.
-// It returns nil if there is no row.
-func scanFacts(row pgx.Row) (*ActivityFacts, error) {
-	var f ActivityFacts
-	err := row.Scan(&f.ID, &f.Name, &f.Sport, &f.StartedAt, &f.DurationS, &f.DistanceM)
+// findDuplicate returns the activity of userID, other than f itself, that is
+// a possible duplicate of f by rule and starts closest to it, together with
+// how they compare. It returns nil if there is none.
+func findDuplicate(ctx context.Context, tx pgx.Tx, userID string, f activity.Facts, rule activity.DuplicateRule) (*activity.Facts, activity.Comparison, error) {
+	if f.StartedAt == nil {
+		return nil, activity.Comparison{}, nil
+	}
+	// The start time window only narrows down the candidates;
+	// rule.Matches decides.
+	rows, err := tx.Query(ctx, `
+		SELECT `+factsColumns+`
+		  FROM activities
+		 WHERE user_id = $1
+		   AND id <> $2
+		   AND started_at BETWEEN $3::timestamptz - make_interval(secs => $4)
+		                      AND $3::timestamptz + make_interval(secs => $4)
+		 ORDER BY abs(extract(epoch FROM started_at - $3::timestamptz))`,
+		userID, f.ID, f.StartedAt, rule.StartTolerance.Seconds())
+	if err != nil {
+		return nil, activity.Comparison{}, fmt.Errorf("find possible duplicates: %w", err)
+	}
+	candidates, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (activity.Facts, error) {
+		var c activity.Facts
+		err := row.Scan(factsFields(&c)...)
+		return c, err
+	})
+	if err != nil {
+		return nil, activity.Comparison{}, fmt.Errorf("find possible duplicates: %w", err)
+	}
+	for _, c := range candidates {
+		if cmp := activity.Compare(f, c); rule.Matches(cmp) {
+			return &c, cmp, nil
+		}
+	}
+	return nil, activity.Comparison{}, nil
+}
+
+// factsColumns selects the columns of activity.Facts, in the order factsFields
+// scans them.
+const factsColumns = `id, name, sport, started_at, duration_s, distance_m`
+
+// factsFields returns the scan destinations for factsColumns.
+func factsFields(f *activity.Facts) []any {
+	return []any{&f.ID, &f.Name, &f.Sport, &f.StartedAt, &f.DurationS, &f.DistanceM}
+}
+
+// scanFacts scans one row of factsColumns. It returns nil if there is no row.
+func scanFacts(row pgx.Row) (*activity.Facts, error) {
+	var f activity.Facts
+	err := row.Scan(factsFields(&f)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -209,22 +227,10 @@ func scanFacts(row pgx.Row) (*ActivityFacts, error) {
 	return &f, nil
 }
 
-// ActivitySummary is an activity without its geometry.
-type ActivitySummary struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Sport     string     `json:"sport"`
-	StartedAt *time.Time `json:"startedAt"`
-	DurationS *int       `json:"durationS"`
-	DistanceM float64    `json:"distanceM"`
-	// BBox is [west, south, east, north] in WGS 84.
-	BBox [4]float64 `json:"bbox"`
-}
-
 // ListActivities returns userID's activities, newest first.
-func (s *Store) ListActivities(ctx context.Context, userID string) ([]ActivitySummary, error) {
+func (s *Store) ListActivities(ctx context.Context, userID string) ([]activity.Summary, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, sport, started_at, duration_s, distance_m,
+		SELECT `+factsColumns+`,
 		       ST_XMin(geom), ST_YMin(geom), ST_XMax(geom), ST_YMax(geom)
 		  FROM activities
 		 WHERE user_id = $1
@@ -234,11 +240,11 @@ func (s *Store) ListActivities(ctx context.Context, userID string) ([]ActivitySu
 	}
 	defer rows.Close()
 
-	list := []ActivitySummary{}
+	list := []activity.Summary{}
 	for rows.Next() {
-		var a ActivitySummary
-		if err := rows.Scan(&a.ID, &a.Name, &a.Sport, &a.StartedAt, &a.DurationS, &a.DistanceM,
-			&a.BBox[0], &a.BBox[1], &a.BBox[2], &a.BBox[3]); err != nil {
+		var a activity.Summary
+		fields := append(factsFields(&a.Facts), &a.BBox[0], &a.BBox[1], &a.BBox[2], &a.BBox[3])
+		if err := rows.Scan(fields...); err != nil {
 			return nil, fmt.Errorf("scan activity: %w", err)
 		}
 		list = append(list, a)
