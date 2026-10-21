@@ -140,6 +140,20 @@ func TestParseLimitPositions(t *testing.T) {
 	}
 }
 
+func TestParseInvalidTimestamps(t *testing.T) {
+	doc := `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>
+		<trkpt lat="59.3" lon="18.0"><time>2001-01-01T00:00:00Z</time></trkpt>
+		<trkpt lat="59.4" lon="18.1"><time>2100-01-01T00:00:00Z</time></trkpt>
+	</trkseg></trk></gpx>`
+	_, err := Parse([]byte(doc), "x")
+	if !errors.Is(err, ErrInvalidTimestamps) {
+		t.Fatalf("err = %v, want ErrInvalidTimestamps", err)
+	}
+	if want := "invalid timestamps: the first and last points are 36159 days apart (2001-01-01 to 2100-01-01)"; err.Error() != want {
+		t.Errorf("err = %q, want %q", err, want)
+	}
+}
+
 func TestNormalizeSport(t *testing.T) {
 	for in, want := range map[string]string{
 		"":               "unknown",
