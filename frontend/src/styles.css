@@ -10,6 +10,8 @@
   --error: #b42318;
   --warning-bg: #fff8e6;
   --warning-border: #f0d48a;
+  /* MapLibre popups are white in both color schemes, so their text is not --fg. */
+  --popup-fg: #1d2125;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--fg);
   background: var(--bg);
@@ -332,7 +334,7 @@ button.link {
 }
 
 .maplibregl-popup-content {
-  color: #1d2125;
+  color: var(--popup-fg);
 }
 
 @media (max-width: 700px) {

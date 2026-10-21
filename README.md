@@ -36,13 +36,17 @@ Files without a GPS track (indoor rides, treadmill runs, gym sessions) aren't im
 Each import is checked against the user's own activities (never other users'):
 
 - **Already imported:** a byte-identical file (same SHA-256) is always skipped.
-- **Possible duplicate:** the file is *not* imported if an existing activity starts within **2 seconds** of it, and its distance and duration are both within **2%** of the larger value. Duration is skipped when either side has no timestamps.
+- **Possible duplicate:** the file is *not* imported if an existing activity starts within a few seconds of it, and its distance and duration are both within a few percent of the larger value. Duration is skipped when either side has no timestamps.
 
 GPS points aren't compared, because Garmin, Strava, Runkeeper etc. record and resample them differently. Files without timestamps can only be detected as already imported.
 
 Possible duplicates can still be imported on purpose. The UI lists them side by side with the matching activity, explains the rules, and lets the user tick the ones to import anyway. The batch command takes `-allow-duplicates`.
 
-The tolerances are the constants `DuplicateStartTolerance` and `DuplicateRelativeTolerance` in [backend/internal/importer/duplicates.go](backend/internal/importer/duplicates.go). The frontend reads them from `GET /api/import/rules`, so changing them there also updates what users are told.
+The tolerances are the constants `DuplicateStartTolerance` and `DuplicateRelativeTolerance` in [backend/internal/importer/duplicates.go](backend/internal/importer/duplicates.go), and the comparison is `activity.Compare` in [backend/internal/activity/duplicate.go](backend/internal/activity/duplicate.go). The frontend reads the tolerances from `GET /api/config` and shows the backend's comparison for each possible duplicate, so changing them there also updates what users are told.
+
+### Shared configuration
+
+Values that more than one layer depends on are defined in the backend and served from `GET /api/config` (see [backend/internal/api/config.go](backend/internal/api/config.go)), which the frontend loads before it renders: the tile URL, layer name and zoom range, the accepted import file extensions, the duplicate rule, and the sport ids the backend recognizes. The frontend decides how sports look (labels and colors) for the ones it has a style for.
 
 ### Services
 
