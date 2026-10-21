@@ -9,7 +9,7 @@ import Map, {
   type MapRef,
 } from 'react-map-gl/maplibre';
 import { useConfig } from '../config';
-import { defaultSportColor, formatDate, formatDistance, sportColors } from '../format';
+import { defaultSportColor, formatDate, formatDistance, sportStyles } from '../format';
 
 // OpenFreeMap: free vector basemap, no API key. Data © OpenStreetMap
 // contributors (ODbL); attribution is supplied by the style itself.
@@ -18,7 +18,7 @@ const basemapStyle = 'https://tiles.openfreemap.org/styles/liberty';
 const lineColor = [
   'match',
   ['get', 'sport'],
-  ...Object.entries(sportColors).flat(),
+  ...Object.entries(sportStyles).flatMap(([sport, style]) => [sport, style.color]),
   defaultSportColor,
 ] as unknown as string;
 

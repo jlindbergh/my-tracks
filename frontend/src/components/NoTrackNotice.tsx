@@ -1,4 +1,4 @@
-import { formatSport } from '../format';
+import { sportLabel } from '../format';
 import { formatCount, plural } from '../plural';
 
 export interface NoTrackItem {
@@ -33,7 +33,7 @@ export default function NoTrackNotice({ items }: Props) {
         {sports.map(([sport, count], i) => (
           <span key={sport}>
             {i > 0 && ', '}
-            {formatSport(sport)} ({count})
+            {sportLabel(sport)} ({count})
           </span>
         ))}
       </p>
@@ -44,7 +44,7 @@ export default function NoTrackNotice({ items }: Props) {
             <li key={item.key}>
               {item.file}
               {item.name !== item.file.replace(/\.gpx$/i, '') && <span className="hint"> – {item.name}</span>}
-              <span className="hint"> · {formatSport(item.sport)}</span>
+              <span className="hint"> · {sportLabel(item.sport)}</span>
             </li>
           ))}
         </ul>

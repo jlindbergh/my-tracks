@@ -1,5 +1,5 @@
 import type { Activity } from '../api';
-import { formatDate, formatDistance, formatDuration, sportColor } from '../format';
+import { formatDate, formatDistance, formatDuration, sportColor, sportLabel } from '../format';
 
 interface Props {
   activities: Activity[];
@@ -24,7 +24,7 @@ export default function ActivityList({ activities, selectedId, onSelect }: Props
             <span className="activity-text">
               <span className="activity-name">{a.name}</span>
               <span className="activity-meta">
-                {formatDate(a.startedAt)} · {a.sport} · {formatDistance(a.distanceM)}
+                {formatDate(a.startedAt)} · {sportLabel(a.sport)} · {formatDistance(a.distanceM)}
                 {a.durationS != null && ` · ${formatDuration(a.durationS)}`}
               </span>
             </span>
