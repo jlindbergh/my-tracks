@@ -50,8 +50,8 @@ type duplicateRule struct {
 	RelativeTolerance float64 `json:"relativeTolerance"`
 }
 
-func (s *Server) config(w http.ResponseWriter, _ *http.Request) {
-	s.writeJSON(w, http.StatusOK, appConfig{
+func (s *Server) config(w http.ResponseWriter, r *http.Request) {
+	s.writeJSON(w, r, http.StatusOK, appConfig{
 		Tiles: tilesConfig{
 			URL:         tilesPath,
 			SourceLayer: tileLayer,

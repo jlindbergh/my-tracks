@@ -2,6 +2,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,7 +59,7 @@ func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.UserFrom(r.Context())
-	s.writeJSON(w, http.StatusOK, u)
+	s.writeJSON(w, r, http.StatusOK, u)
 }
 
 func (s *Server) listActivities(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +69,7 @@ func (s *Server) listActivities(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, list)
+	s.writeJSON(w, r, http.StatusOK, list)
 }
 
 // importActivities accepts a multipart form with one or more "files" fields
@@ -115,7 +116,7 @@ func (s *Server) importActivities(w http.ResponseWriter, r *http.Request) {
 		results = append(results, res)
 	}
 
-	s.writeJSON(w, http.StatusOK, results)
+	s.writeJSON(w, r, http.StatusOK, results)
 }
 
 // tile proxies a vector tile request to Martin for the authenticated user.
@@ -177,11 +178,19 @@ func parseTile(r *http.Request) (z, x, y int, ok bool) {
 	return z, x, y, true
 }
 
-func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
+// writeJSON writes v as JSON with the given status. It encodes v before
+// writing anything, so a value that cannot be encoded becomes a 500 rather
+// than a success status with an empty or cut-off body.
+func (s *Server) writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(v); err != nil {
+		s.serverError(w, r, fmt.Errorf("encode response: %w", err))
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		s.log.Warn("encode response", "err", err)
+	if _, err := buf.WriteTo(w); err != nil {
+		s.log.WarnContext(r.Context(), "write response", "err", err)
 	}
 }
 
