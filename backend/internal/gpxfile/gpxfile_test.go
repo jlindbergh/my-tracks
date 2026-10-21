@@ -95,6 +95,51 @@ func TestParseNoTrackReportsActivity(t *testing.T) {
 	}
 }
 
+func TestParseInvalidPosition(t *testing.T) {
+	tests := []struct {
+		name, lat, lon, want string
+	}{
+		{"latitude too large", "95", "18", "invalid GPS position: point 2 of track 1, segment 1 has latitude 95, outside -90 to 90"},
+		{"latitude too small", "-90.5", "18", "invalid GPS position: point 2 of track 1, segment 1 has latitude -90.5, outside -90 to 90"},
+		{"longitude too large", "59", "180.1", "invalid GPS position: point 2 of track 1, segment 1 has longitude 180.1, outside -180 to 180"},
+		{"latitude NaN", "NaN", "18", "invalid GPS position: point 2 of track 1, segment 1 has latitude NaN, which is not a number"},
+		{"longitude infinite", "59", "Inf", "invalid GPS position: point 2 of track 1, segment 1 has longitude +Inf, which is not a number"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>
+				<trkpt lat="59.3" lon="18.0"/><trkpt lat="` + tt.lat + `" lon="` + tt.lon + `"/><trkpt lat="59.4" lon="18.1"/>
+			</trkseg></trk></gpx>`
+			_, err := Parse([]byte(doc), "x")
+			if !errors.Is(err, ErrInvalidPosition) {
+				t.Fatalf("err = %v, want ErrInvalidPosition", err)
+			}
+			if err.Error() != tt.want {
+				t.Errorf("err = %q, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseInvalidPositionInRoute(t *testing.T) {
+	doc := `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><rte>
+		<rtept lat="59.3" lon="18.0"/><rtept lat="59.4" lon="-200"/>
+	</rte></gpx>`
+	_, err := Parse([]byte(doc), "x")
+	if want := "invalid GPS position: point 2 of route 1 has longitude -200, outside -180 to 180"; err == nil || err.Error() != want {
+		t.Errorf("err = %v, want %q", err, want)
+	}
+}
+
+func TestParseLimitPositions(t *testing.T) {
+	doc := `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>
+		<trkpt lat="-90" lon="-180"/><trkpt lat="90" lon="180"/>
+	</trkseg></trk></gpx>`
+	if _, err := Parse([]byte(doc), "x"); err != nil {
+		t.Errorf("Parse: %v, want positions on the limits to be accepted", err)
+	}
+}
+
 func TestNormalizeSport(t *testing.T) {
 	for in, want := range map[string]string{
 		"":               "unknown",
