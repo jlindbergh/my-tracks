@@ -8,6 +8,8 @@
   --accent: #2563eb;
   --accent-fg: #ffffff;
   --error: #b42318;
+  --error-bg: #fef3f2;
+  --error-border: #fecdca;
   --warning-bg: #fff8e6;
   --warning-border: #f0d48a;
   /* MapLibre popups are white in both color schemes, so their text is not --fg. */
@@ -27,6 +29,8 @@
     --selected: #1e2b3f;
     --accent: #4f8cf7;
     --error: #f97066;
+    --error-bg: #2b1715;
+    --error-border: #6b2a24;
     --warning-bg: #2a2416;
     --warning-border: #5c4a1f;
   }
@@ -134,11 +138,6 @@ button.link {
   width: 100%;
 }
 
-.import-result ul {
-  margin: 4px 0 0;
-  padding-left: 18px;
-}
-
 .import-panel {
   display: flex;
   flex-direction: column;
@@ -234,6 +233,47 @@ button.link {
   gap: 8px;
   margin-top: 12px;
   flex-wrap: wrap;
+}
+
+.failed {
+  border: 1px solid var(--error-border);
+  background: var(--error-bg);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.failed h2 {
+  font-size: 1rem;
+  margin: 0 0 4px;
+}
+
+.failed > p {
+  margin: 0 0 8px;
+}
+
+.failed > ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.failed > ul > li + li {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--error-border);
+}
+
+.failed-file {
+  display: block;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.failed-reason {
+  display: block;
+  color: var(--error);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
 }
 
 .notice {
