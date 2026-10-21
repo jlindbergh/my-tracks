@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jlindbergh/my-tracks/backend/internal/activity"
 	"github.com/jlindbergh/my-tracks/backend/internal/gpxfile"
 	"github.com/jlindbergh/my-tracks/backend/internal/store"
 )
@@ -44,10 +45,10 @@ type Result struct {
 	ActivityID string `json:"activityId,omitempty"`
 	Error      string `json:"error,omitempty"`
 	// Activity is the activity read from the file.
-	Activity *store.ActivityFacts `json:"activity,omitempty"`
+	Activity *activity.Facts `json:"activity,omitempty"`
 	// Existing is the stored activity this file matched, for
 	// already_imported and possible_duplicate.
-	Existing *store.ActivityFacts `json:"existing,omitempty"`
+	Existing *activity.Facts `json:"existing,omitempty"`
 }
 
 // Options control an import.
@@ -83,7 +84,7 @@ func (im *Importer) ImportGPX(ctx context.Context, userID, filename string, data
 	var noTrack *gpxfile.NoTrackError
 	if errors.As(err, &noTrack) {
 		res.Status = StatusNoGPSTrack
-		res.Activity = &store.ActivityFacts{Name: noTrack.Name, Sport: noTrack.Sport}
+		res.Activity = &activity.Facts{Name: noTrack.Name, Sport: noTrack.Sport}
 		return res, nil
 	}
 	if err != nil {

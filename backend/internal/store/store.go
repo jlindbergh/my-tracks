@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jlindbergh/my-tracks/backend/internal/activity"
 	"github.com/jlindbergh/my-tracks/backend/internal/gpxfile"
 )
 
@@ -75,16 +76,6 @@ type DuplicateRule struct {
 	RelativeTolerance float64
 }
 
-// ActivityFacts are the values of an activity used to identify it.
-type ActivityFacts struct {
-	ID        string     `json:"id,omitempty"`
-	Name      string     `json:"name"`
-	Sport     string     `json:"sport"`
-	StartedAt *time.Time `json:"startedAt"`
-	DurationS *int       `json:"durationS"`
-	DistanceM float64    `json:"distanceM"`
-}
-
 // InsertStatus is the outcome of InsertActivity.
 type InsertStatus int
 
@@ -113,9 +104,9 @@ func (s InsertStatus) String() string {
 type InsertResult struct {
 	Status InsertStatus
 	// New describes the activity that was to be inserted. Its ID is set if it was.
-	New ActivityFacts
+	New activity.Facts
 	// Existing is the already stored activity it matched, if any.
-	Existing *ActivityFacts
+	Existing *activity.Facts
 }
 
 // InsertActivity stores an activity for userID unless the user already has
@@ -124,7 +115,7 @@ type InsertResult struct {
 func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivity, rule *DuplicateRule) (InsertResult, error) {
 	a := na.Activity
 	wkt := a.WKT()
-	res := InsertResult{New: ActivityFacts{Name: a.Name, Sport: a.Sport, StartedAt: a.StartedAt, DurationS: a.DurationS}}
+	res := InsertResult{New: activity.Facts{Name: a.Name, Sport: a.Sport, StartedAt: a.StartedAt, DurationS: a.DurationS}}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -144,7 +135,7 @@ func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivit
 	}
 
 	existing, err := scanFacts(tx.QueryRow(ctx, `
-		SELECT id, name, sport, started_at, duration_s, distance_m
+		SELECT `+factsColumns+`
 		  FROM activities
 		 WHERE user_id = $1 AND content_sha256 = $2`,
 		userID, na.ContentSHA256))
@@ -158,7 +149,7 @@ func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivit
 
 	if rule != nil && a.StartedAt != nil {
 		existing, err := scanFacts(tx.QueryRow(ctx, `
-			SELECT id, name, sport, started_at, duration_s, distance_m
+			SELECT `+factsColumns+`
 			  FROM activities
 			 WHERE user_id = $1
 			   AND started_at BETWEEN $2::timestamptz - make_interval(secs => $3)
@@ -195,11 +186,19 @@ func (s *Store) InsertActivity(ctx context.Context, userID string, na NewActivit
 	return res, nil
 }
 
-// scanFacts scans one row of id, name, sport, started_at, duration_s, distance_m.
-// It returns nil if there is no row.
-func scanFacts(row pgx.Row) (*ActivityFacts, error) {
-	var f ActivityFacts
-	err := row.Scan(&f.ID, &f.Name, &f.Sport, &f.StartedAt, &f.DurationS, &f.DistanceM)
+// factsColumns selects the columns of activity.Facts, in the order factsFields
+// scans them.
+const factsColumns = `id, name, sport, started_at, duration_s, distance_m`
+
+// factsFields returns the scan destinations for factsColumns.
+func factsFields(f *activity.Facts) []any {
+	return []any{&f.ID, &f.Name, &f.Sport, &f.StartedAt, &f.DurationS, &f.DistanceM}
+}
+
+// scanFacts scans one row of factsColumns. It returns nil if there is no row.
+func scanFacts(row pgx.Row) (*activity.Facts, error) {
+	var f activity.Facts
+	err := row.Scan(factsFields(&f)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -209,22 +208,10 @@ func scanFacts(row pgx.Row) (*ActivityFacts, error) {
 	return &f, nil
 }
 
-// ActivitySummary is an activity without its geometry.
-type ActivitySummary struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Sport     string     `json:"sport"`
-	StartedAt *time.Time `json:"startedAt"`
-	DurationS *int       `json:"durationS"`
-	DistanceM float64    `json:"distanceM"`
-	// BBox is [west, south, east, north] in WGS 84.
-	BBox [4]float64 `json:"bbox"`
-}
-
 // ListActivities returns userID's activities, newest first.
-func (s *Store) ListActivities(ctx context.Context, userID string) ([]ActivitySummary, error) {
+func (s *Store) ListActivities(ctx context.Context, userID string) ([]activity.Summary, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, sport, started_at, duration_s, distance_m,
+		SELECT `+factsColumns+`,
 		       ST_XMin(geom), ST_YMin(geom), ST_XMax(geom), ST_YMax(geom)
 		  FROM activities
 		 WHERE user_id = $1
@@ -234,11 +221,11 @@ func (s *Store) ListActivities(ctx context.Context, userID string) ([]ActivitySu
 	}
 	defer rows.Close()
 
-	list := []ActivitySummary{}
+	list := []activity.Summary{}
 	for rows.Next() {
-		var a ActivitySummary
-		if err := rows.Scan(&a.ID, &a.Name, &a.Sport, &a.StartedAt, &a.DurationS, &a.DistanceM,
-			&a.BBox[0], &a.BBox[1], &a.BBox[2], &a.BBox[3]); err != nil {
+		var a activity.Summary
+		fields := append(factsFields(&a.Facts), &a.BBox[0], &a.BBox[1], &a.BBox[2], &a.BBox[3])
+		if err := rows.Scan(fields...); err != nil {
 			return nil, fmt.Errorf("scan activity: %w", err)
 		}
 		list = append(list, a)

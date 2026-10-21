@@ -47,10 +47,10 @@ func testUser(t *testing.T, s *Store) User {
 
 var baseStart = time.Date(2026, 6, 1, 7, 0, 0, 0, time.UTC)
 
-// activity returns a straight track north from Stockholm. Its length is
+// newActivity returns a straight track north from Stockholm. Its length is
 // proportional to lengthFactor (1 = about 1.1 km), so distances can be
 // varied by exact percentages.
-func activity(startOffset time.Duration, durationS int, lengthFactor float64) NewActivity {
+func newActivity(startOffset time.Duration, durationS int, lengthFactor float64) NewActivity {
 	start := baseStart.Add(startOffset)
 	const n = 10
 	line := make([]gpxfile.LonLat, n+1)
@@ -87,17 +87,17 @@ func TestInsertActivityDuplicates(t *testing.T) {
 		rule *DuplicateRule
 		want InsertStatus
 	}{
-		{"start 1s later, 1% longer", activity(time.Second, 3636, 1.01), rule, PossibleDuplicate},
-		{"start 2s earlier, same", activity(-2*time.Second, 3600, 1), rule, PossibleDuplicate},
-		{"start 3s later", activity(3*time.Second, 3600, 1), rule, Inserted},
-		{"distance 3% longer", activity(0, 3600, 1.03), rule, Inserted},
-		{"duration 3% longer", activity(0, 3708, 1), rule, Inserted},
-		{"duplicates allowed", activity(0, 3600, 1), nil, Inserted},
+		{"start 1s later, 1% longer", newActivity(time.Second, 3636, 1.01), rule, PossibleDuplicate},
+		{"start 2s earlier, same", newActivity(-2*time.Second, 3600, 1), rule, PossibleDuplicate},
+		{"start 3s later", newActivity(3*time.Second, 3600, 1), rule, Inserted},
+		{"distance 3% longer", newActivity(0, 3600, 1.03), rule, Inserted},
+		{"duration 3% longer", newActivity(0, 3708, 1), rule, Inserted},
+		{"duplicates allowed", newActivity(0, 3600, 1), nil, Inserted},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			u := testUser(t, s)
-			first := insert(t, s, u.ID, activity(0, 3600, 1), rule)
+			first := insert(t, s, u.ID, newActivity(0, 3600, 1), rule)
 			if first.Status != Inserted {
 				t.Fatalf("first insert: status %v", first.Status)
 			}
@@ -116,9 +116,9 @@ func TestInsertActivityDuplicates(t *testing.T) {
 func TestInsertActivityWithoutDuration(t *testing.T) {
 	s := testStore(t)
 	u := testUser(t, s)
-	insert(t, s, u.ID, activity(0, 3600, 1), rule)
+	insert(t, s, u.ID, newActivity(0, 3600, 1), rule)
 
-	na := activity(0, 0, 1)
+	na := newActivity(0, 0, 1)
 	na.Activity.DurationS = nil
 	if got := insert(t, s, u.ID, na, rule); got.Status != PossibleDuplicate {
 		t.Errorf("status = %v, want PossibleDuplicate (duration is skipped when unknown)", got.Status)
@@ -128,7 +128,7 @@ func TestInsertActivityWithoutDuration(t *testing.T) {
 func TestInsertActivitySameFile(t *testing.T) {
 	s := testStore(t)
 	u := testUser(t, s)
-	na := activity(0, 3600, 1)
+	na := newActivity(0, 3600, 1)
 	insert(t, s, u.ID, na, rule)
 
 	// A byte-identical file is rejected even when duplicates are allowed.
@@ -140,12 +140,12 @@ func TestInsertActivitySameFile(t *testing.T) {
 func TestInsertActivityOtherUsersAreIgnored(t *testing.T) {
 	s := testStore(t)
 	alice := testUser(t, s)
-	na := activity(0, 3600, 1)
+	na := newActivity(0, 3600, 1)
 	insert(t, s, alice.ID, na, rule)
 
 	// Bob importing the same file, or the same activity, is not a duplicate,
 	// and must not reveal anything about Alice's activity.
-	for i, next := range []NewActivity{na, activity(time.Second, 3600, 1)} {
+	for i, next := range []NewActivity{na, newActivity(time.Second, 3600, 1)} {
 		bob := testUser(t, s)
 		got := insert(t, s, bob.ID, next, rule)
 		if got.Status != Inserted || got.Existing != nil {
