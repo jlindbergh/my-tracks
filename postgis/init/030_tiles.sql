@@ -27,21 +27,21 @@ BEGIN
         RETURN NULL;
     END IF;
 
+    -- The layer name is tileLayer in backend/internal/api/config.go.
     SELECT ST_AsMVT(t, 'activities', 4096, 'geom')
       INTO mvt
       FROM (
-        SELECT a.id::text                              AS id,
-               a.name,
+        -- Only what the map styles and selects by. Everything else about an
+        -- activity comes from the API, which the frontend looks up by id.
+        SELECT a.id::text AS id,
                a.sport,
-               extract(epoch FROM a.started_at)::bigint AS started_at,
-               round(a.distance_m)::integer            AS distance_m,
                ST_AsMVTGeom(
                    CASE
                        WHEN z < 10 THEN a.geom_lo
                        WHEN z < 13 THEN a.geom_mid
                        ELSE a.geom_3857
                    END,
-                   bbox, 4096, 64, true)               AS geom
+                   bbox, 4096, 64, true) AS geom
           FROM activities a
          WHERE a.user_id = uid
            AND a.geom_3857 && ST_Expand(bbox, (ST_XMax(bbox) - ST_XMin(bbox)) * 64 / 4096)

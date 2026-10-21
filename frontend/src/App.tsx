@@ -86,6 +86,7 @@ export default function App() {
       <main className="map">
         <TrackMap
           mapRef={mapRef}
+          activities={activities}
           dataVersion={dataVersion}
           selectedId={selectedId}
           onSelect={setSelectedId}

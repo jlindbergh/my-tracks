@@ -14,10 +14,9 @@ export function formatDuration(s: number | null): string {
   return h > 0 ? `${h} h ${m} min` : `${m} min`;
 }
 
-export function formatDate(value: string | number | null): string {
+export function formatDate(value: string | null): string {
   if (value == null) return 'Unknown date';
-  const d = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 export function formatDateTime(value: string | null): string {

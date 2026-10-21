@@ -8,6 +8,7 @@ import Map, {
   type MapLayerMouseEvent,
   type MapRef,
 } from 'react-map-gl/maplibre';
+import type { Activity } from '../api';
 import { useConfig } from '../config';
 import { defaultSportColor, formatDate, formatDistance, sportStyles } from '../format';
 
@@ -38,14 +39,13 @@ const activitiesLayer: LayerProps = {
 interface PopupInfo {
   longitude: number;
   latitude: number;
-  id: string;
-  name: string;
-  startedAt: number | null;
-  distanceM: number;
+  activityId: string;
 }
 
 interface Props {
   mapRef: RefObject<MapRef | null>;
+  /** The user's activities. The popup shows the clicked one; tiles only hold ids and sports. */
+  activities: Activity[];
   /** Changes whenever the user's data changes, so tiles are refetched. */
   dataVersion: number;
   selectedId: string | null;
@@ -53,7 +53,7 @@ interface Props {
   onLoad: () => void;
 }
 
-export default function TrackMap({ mapRef, dataVersion, selectedId, onSelect, onLoad }: Props) {
+export default function TrackMap({ mapRef, activities, dataVersion, selectedId, onSelect, onLoad }: Props) {
   const { tiles } = useConfig();
   const [popup, setPopup] = useState<PopupInfo | null>(null);
   const [cursor, setCursor] = useState<string>('');
@@ -65,17 +65,12 @@ export default function TrackMap({ mapRef, dataVersion, selectedId, onSelect, on
       onSelect(null);
       return;
     }
-    const p = feature.properties;
-    setPopup({
-      longitude: e.lngLat.lng,
-      latitude: e.lngLat.lat,
-      id: String(p.id),
-      name: String(p.name),
-      startedAt: typeof p.started_at === 'number' ? p.started_at : null,
-      distanceM: Number(p.distance_m),
-    });
-    onSelect(String(p.id));
+    const activityId = String(feature.properties.id);
+    setPopup({ longitude: e.lngLat.lng, latitude: e.lngLat.lat, activityId });
+    onSelect(activityId);
   }
+
+  const popupActivity = popup && activities.find((a) => a.id === popup.activityId);
 
   return (
     <Map
@@ -111,16 +106,16 @@ export default function TrackMap({ mapRef, dataVersion, selectedId, onSelect, on
           beforeId={activitiesLayerId}
         />
       </Source>
-      {popup && (
+      {popup && popupActivity && (
         <Popup
           longitude={popup.longitude}
           latitude={popup.latitude}
           onClose={() => setPopup(null)}
           closeOnClick={false}
         >
-          <strong>{popup.name}</strong>
+          <strong>{popupActivity.name}</strong>
           <div>
-            {formatDate(popup.startedAt)} · {formatDistance(popup.distanceM)}
+            {formatDate(popupActivity.startedAt)} · {formatDistance(popupActivity.distanceM)}
           </div>
         </Popup>
       )}
