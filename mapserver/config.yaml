@@ -11,9 +11,9 @@ postgres:
   connection_string: '${DATABASE_URL}'
   # Only publish what is listed below, never tables or functions by discovery.
   auto_publish: false
+  # The source id is martinSource in backend/internal/api/config.go. The
+  # backend also enforces the zoom range, so none is set here.
   functions:
     activities:
       schema: public
       function: activities_tiles
-      minzoom: 0
-      maxzoom: 22

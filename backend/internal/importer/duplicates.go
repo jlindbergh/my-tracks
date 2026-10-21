@@ -27,7 +27,7 @@ import (
 // Possible duplicates are not stored unless the user explicitly asks for it.
 // Files without timestamps can only be detected as already imported.
 //
-// The frontend reads these values from GET /api/import/rules, so changing
+// The frontend reads these values from GET /api/config, so changing
 // them here also changes what users are told.
 const (
 	// DuplicateStartTolerance is how far apart two start times may be.

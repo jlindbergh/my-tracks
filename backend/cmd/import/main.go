@@ -63,7 +63,7 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || !strings.EqualFold(filepath.Ext(path), ".gpx") {
+		if d.IsDir() || !importer.Accepts(path) {
 			return nil
 		}
 		data, err := os.ReadFile(path)

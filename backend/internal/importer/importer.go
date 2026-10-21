@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/jlindbergh/my-tracks/backend/internal/activity"
@@ -18,6 +19,18 @@ import (
 
 // MaxFileSize is the largest file accepted for import.
 const MaxFileSize = 50 << 20
+
+// AcceptedExtensions returns the extensions of the files that can be imported.
+func AcceptedExtensions() []string {
+	return []string{".gpx"}
+}
+
+// Accepts reports whether filename has one of the AcceptedExtensions,
+// ignoring case.
+func Accepts(filename string) bool {
+	ext := filepath.Ext(filename)
+	return slices.ContainsFunc(AcceptedExtensions(), func(e string) bool { return strings.EqualFold(e, ext) })
+}
 
 // Status is the outcome of importing one file.
 type Status string

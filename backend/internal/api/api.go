@@ -20,9 +20,6 @@ import (
 // maxUploadSize caps one import request, which may hold many files.
 const maxUploadSize = 500 << 20
 
-// maxZoom matches maxzoom of the activities source in mapserver/config.yaml.
-const maxZoom = 22
-
 // Server serves the API.
 type Server struct {
 	store    *store.Store
@@ -47,11 +44,11 @@ func New(s *store.Store, im *importer.Importer, martinURL *url.URL, log *slog.Lo
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/healthz", s.healthz)
+	mux.HandleFunc("GET /api/config", s.config)
 	mux.HandleFunc("GET /api/me", auth.Require(s.me))
 	mux.HandleFunc("GET /api/activities", auth.Require(s.listActivities))
 	mux.HandleFunc("POST /api/activities/import", auth.Require(s.importActivities))
-	mux.HandleFunc("GET /api/import/rules", auth.Require(s.importRules))
-	mux.HandleFunc("GET /api/tiles/{z}/{x}/{y}", auth.Require(s.tile))
+	mux.HandleFunc("GET "+tilesPath, auth.Require(s.tile))
 	return mux
 }
 
@@ -72,18 +69,6 @@ func (s *Server) listActivities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, list)
-}
-
-// importRules tells the frontend how duplicates are detected, so what users
-// are told always matches what the importer does.
-func (s *Server) importRules(w http.ResponseWriter, _ *http.Request) {
-	s.writeJSON(w, http.StatusOK, struct {
-		StartToleranceS   float64 `json:"startToleranceS"`
-		RelativeTolerance float64 `json:"relativeTolerance"`
-	}{
-		StartToleranceS:   importer.DuplicateStartTolerance.Seconds(),
-		RelativeTolerance: importer.DuplicateRelativeTolerance,
-	})
 }
 
 // importActivities accepts a multipart form with one or more "files" fields
@@ -145,7 +130,7 @@ func (s *Server) tile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target := s.martin.JoinPath("activities", strconv.Itoa(z), strconv.Itoa(x), strconv.Itoa(y))
+	target := s.martin.JoinPath(martinSource, strconv.Itoa(z), strconv.Itoa(x), strconv.Itoa(y))
 	target.RawQuery = url.Values{"user_id": {u.ID}}.Encode()
 
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target.String(), nil)
@@ -182,7 +167,7 @@ func parseTile(r *http.Request) (z, x, y int, ok bool) {
 	z, errZ := strconv.Atoi(r.PathValue("z"))
 	x, errX := strconv.Atoi(r.PathValue("x"))
 	y, errY := strconv.Atoi(r.PathValue("y"))
-	if errZ != nil || errX != nil || errY != nil || z < 0 || z > maxZoom {
+	if errZ != nil || errX != nil || errY != nil || z < minZoom || z > maxZoom {
 		return 0, 0, 0, false
 	}
 	n := 1 << z

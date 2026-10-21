@@ -10,6 +10,8 @@ import (
 	"unicode"
 
 	"github.com/tkrajina/gpxgo/gpx"
+
+	"github.com/jlindbergh/my-tracks/backend/internal/activity"
 )
 
 // ErrNoTrack is returned when a file has no track or route with at least
@@ -133,22 +135,22 @@ func (a Activity) WKT() string {
 	return b.String()
 }
 
-// sportAliases maps the activity types written by common exporters to one
-// name per sport. Strava's older exports use numeric codes.
+// sportAliases maps the activity types written by common exporters to the
+// sport ids in package activity. Strava's older exports use numeric codes.
 var sportAliases = map[string]string{
-	"1":               "cycling",
-	"9":               "running",
-	"10":              "walking",
-	"4":               "hiking",
-	"run":             "running",
-	"trail_running":   "running",
-	"ride":            "cycling",
-	"biking":          "cycling",
-	"road_biking":     "cycling",
-	"mountain_biking": "cycling",
-	"walk":            "walking",
-	"hike":            "hiking",
-	"swim":            "swimming",
+	"1":               activity.SportCycling,
+	"9":               activity.SportRunning,
+	"10":              activity.SportWalking,
+	"4":               activity.SportHiking,
+	"run":             activity.SportRunning,
+	"trail_running":   activity.SportRunning,
+	"ride":            activity.SportCycling,
+	"biking":          activity.SportCycling,
+	"road_biking":     activity.SportCycling,
+	"mountain_biking": activity.SportCycling,
+	"walk":            activity.SportWalking,
+	"hike":            activity.SportHiking,
+	"swim":            activity.SportSwimming,
 }
 
 // normalizeSport lowercases a sport type, turning CamelCase ("VirtualRide",
@@ -168,7 +170,7 @@ func normalizeSport(s string) string {
 	}
 	s = b.String()
 	if s == "" {
-		return "unknown"
+		return activity.SportUnknown
 	}
 	if alias, ok := sportAliases[s]; ok {
 		return alias
