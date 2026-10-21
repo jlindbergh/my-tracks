@@ -117,10 +117,8 @@ export default function ImportPanel({ onImported }: Props) {
   const failed = entries?.filter((e) => e.result.status === 'failed') ?? [];
   const review: ReviewItem[] = (entries ?? [])
     .filter((e) => e.result.status === 'possible_duplicate' && !skipped.has(e.key))
-    .flatMap((e) =>
-      e.result.activity && e.result.existing
-        ? [{ key: e.key, file: e.file.name, activity: e.result.activity, existing: e.result.existing }]
-        : [],
+    .flatMap(({ key, file, result: { activity, existing, comparison } }) =>
+      activity && existing && comparison ? [{ key, file: file.name, activity, existing, comparison }] : [],
     );
   const noTrack: NoTrackItem[] = (entries ?? [])
     .filter((e) => e.result.status === 'no_gps_track')

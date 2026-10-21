@@ -1,4 +1,4 @@
-import type { ActivityFacts } from '../api';
+import type { ActivityFacts, Comparison } from '../api';
 import { formatDateTime, formatDistance, formatDuration, formatPercent } from '../format';
 
 export interface ReviewItem {
@@ -6,6 +6,7 @@ export interface ReviewItem {
   file: string;
   activity: ActivityFacts;
   existing: ActivityFacts;
+  comparison: Comparison;
 }
 
 interface Props {
@@ -17,21 +18,14 @@ interface Props {
   onSkipAll: () => void;
 }
 
-/** Relative difference between two values, as a fraction of the larger. */
-function relativeDiff(a: number, b: number): number {
-  const max = Math.max(a, b);
-  return max === 0 ? 0 : Math.abs(a - b) / max;
-}
-
-function differences(a: ActivityFacts, b: ActivityFacts): string {
+function differences(c: Comparison): string {
   const parts: string[] = [];
-  if (a.startedAt && b.startedAt) {
-    const s = Math.abs(new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()) / 1000;
-    parts.push(s === 0 ? 'same start time' : `starts ${Number(s.toFixed(1))} s apart`);
+  if (c.startDiffS != null) {
+    parts.push(c.startDiffS === 0 ? 'same start time' : `starts ${Number(c.startDiffS.toFixed(1))} s apart`);
   }
-  parts.push(`distance ${formatPercent(relativeDiff(a.distanceM, b.distanceM))} different`);
-  if (a.durationS != null && b.durationS != null) {
-    parts.push(`duration ${formatPercent(relativeDiff(a.durationS, b.durationS))} different`);
+  parts.push(`distance ${formatPercent(c.distanceDiff)} different`);
+  if (c.durationDiff != null) {
+    parts.push(`duration ${formatPercent(c.durationDiff)} different`);
   }
   return parts.join(' · ');
 }
@@ -87,7 +81,7 @@ export default function DuplicateReview({ items, selected, busy, onToggle, onImp
                     </tr>
                   </tbody>
                 </table>
-                <span className="hint">{differences(item.activity, item.existing)}</span>
+                <span className="hint">{differences(item.comparison)}</span>
               </span>
             </label>
           </li>

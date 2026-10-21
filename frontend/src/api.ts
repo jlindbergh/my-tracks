@@ -1,15 +1,4 @@
-export interface Activity {
-  id: string;
-  name: string;
-  sport: string;
-  startedAt: string | null;
-  durationS: number | null;
-  distanceM: number;
-  /** [west, south, east, north] in WGS 84. */
-  bbox: [number, number, number, number];
-}
-
-/** The values used to tell activities apart. */
+/** The values used to tell activities apart; activity.Facts in the backend. */
 export interface ActivityFacts {
   id?: string;
   name: string;
@@ -17,6 +6,23 @@ export interface ActivityFacts {
   startedAt: string | null;
   durationS: number | null;
   distanceM: number;
+}
+
+/** A stored activity; activity.Summary in the backend. */
+export interface Activity extends ActivityFacts {
+  id: string;
+  /** [west, south, east, north] in WGS 84. */
+  bbox: [number, number, number, number];
+}
+
+/** How two activities differ, as computed by the backend. */
+export interface Comparison {
+  /** Seconds between the start times, or null if either is unknown. */
+  startDiffS: number | null;
+  /** Fraction of the longer distance. */
+  distanceDiff: number;
+  /** Fraction of the longer duration, or null if either is unknown. */
+  durationDiff: number | null;
 }
 
 export interface ImportResult {
@@ -28,6 +34,8 @@ export interface ImportResult {
   activity?: ActivityFacts;
   /** The already imported activity it matched. */
   existing?: ActivityFacts;
+  /** How activity and existing differ, for possible_duplicate. */
+  comparison?: Comparison;
 }
 
 /** How the backend detects duplicates; see backend/internal/importer/duplicates.go. */
