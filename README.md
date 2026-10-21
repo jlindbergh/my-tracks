@@ -68,10 +68,10 @@ The SQL in [postgis/init/](postgis/init/) only runs when the database volume is 
 
 A user must never see another user's tracks. The data path is built around that:
 
-1. The browser only talks to the backend. Martin has no published port and no authentication of its own.
+1. The browser only talks to the backend. Martin has no published port and no authentication of its own, so it is only on the `data` network in [compose.yaml](compose.yaml), together with the database and the backend. The frontend container is only on the `web` network and cannot reach either of them.
 2. The backend resolves the user from the session and calls Martin with that user's id. Nothing from the client's query string is forwarded.
 3. `activities_tiles()` in PostGIS returns no tile without a valid `user_id`, and only that user's activities with one.
-4. Martin's database role can execute that function and nothing else. It cannot read the tables directly.
+4. Martin's database role can execute that function and nothing else. It cannot read the tables directly. The function does trust the `user_id` it is given, though, so anything that can call Martin can read any user's tiles. That is why point 1 matters.
 
 **Login does not exist yet.** With `AUTH_MODE=dev` every request is treated as `DEV_USER_EMAIL`, and the backend refuses to start in any other mode. OIDC (Zitadel/Strava) is the next step before this runs anywhere but localhost.
 
