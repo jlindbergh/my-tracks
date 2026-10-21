@@ -21,6 +21,10 @@ import (
 // maxUploadSize caps one import request, which may hold many files.
 const maxUploadSize = 500 << 20
 
+// databaseUnavailableMessage is the body of a 500 caused by the database
+// being down, instead of the generic "internal server error".
+const databaseUnavailableMessage = "the database is unavailable; try again later"
+
 // Server serves the API.
 type Server struct {
 	store    *store.Store
@@ -77,7 +81,10 @@ func (s *Server) listActivities(w http.ResponseWriter, r *http.Request) {
 // ?allowDuplicates=true, possible duplicates are stored instead of reported.
 //
 // Each file is stored on its own, so a file that cannot be stored is
-// reported as failed and the others are still imported and reported.
+// reported as failed and the others are still imported and reported. If the
+// database is unavailable, though, the request fails with a 500: every file
+// would fail, and the import can safely be repeated once it is back, since
+// files already imported are skipped.
 func (s *Server) importActivities(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.UserFrom(r.Context())
 	opts := importer.Options{AllowDuplicates: r.URL.Query().Get("allowDuplicates") == "true"}
@@ -115,6 +122,10 @@ func (s *Server) importActivities(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			if r.Context().Err() != nil {
 				// The client is gone; nobody will read the results.
+				return
+			}
+			if store.IsUnavailable(err) {
+				s.serverError(w, r, err)
 				return
 			}
 			s.log.ErrorContext(r.Context(), "import file", "err", err)
@@ -200,7 +211,13 @@ func (s *Server) writeJSON(w http.ResponseWriter, r *http.Request, status int, v
 	}
 }
 
+// serverError logs err and answers 500, saying so if the database is
+// unavailable. Nothing else about err is sent to the client.
 func (s *Server) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	s.log.ErrorContext(r.Context(), "request failed", "method", r.Method, "path", r.URL.Path, "err", err)
-	http.Error(w, "internal server error", http.StatusInternalServerError)
+	msg := "internal server error"
+	if store.IsUnavailable(err) {
+		msg = databaseUnavailableMessage
+	}
+	http.Error(w, msg, http.StatusInternalServerError)
 }
