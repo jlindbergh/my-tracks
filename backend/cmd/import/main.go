@@ -59,6 +59,9 @@ func run() error {
 
 	counts := map[importer.Status]int{}
 	noTrackSports := map[string]int{}
+	// Files that could not be stored are reported like other failures, and
+	// the import goes on with the next file; they only change the exit status.
+	storeErrors := 0
 	err = filepath.WalkDir(*dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -72,7 +75,11 @@ func run() error {
 		}
 		res, err := im.ImportGPX(ctx, u.ID, path, data, importer.Options{AllowDuplicates: *allowDuplicates})
 		if err != nil {
-			return err
+			if ctx.Err() != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stderr, "import: %s: %v\n", path, err)
+			storeErrors++
 		}
 		counts[res.Status]++
 		switch {
@@ -108,6 +115,9 @@ func run() error {
 		fmt.Printf("Possible duplicates start within %s of an existing activity, with distance and duration within %g%%.\n"+
 			"Run again with -allow-duplicates to import them anyway.\n",
 			importer.DuplicateStartTolerance, importer.DuplicateRelativeTolerance*100)
+	}
+	if storeErrors > 0 {
+		return fmt.Errorf("%d files could not be saved because of a database error (see above)", storeErrors)
 	}
 	return nil
 }
