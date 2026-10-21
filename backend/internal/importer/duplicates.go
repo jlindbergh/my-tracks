@@ -3,7 +3,7 @@ package importer
 import (
 	"time"
 
-	"github.com/jlindbergh/my-tracks/backend/internal/store"
+	"github.com/jlindbergh/my-tracks/backend/internal/activity"
 )
 
 // Duplicate detection.
@@ -38,8 +38,8 @@ const (
 	DuplicateRelativeTolerance = 0.02
 )
 
-// DuplicateRule is the rule above, in the form the store uses.
-var DuplicateRule = store.DuplicateRule{
+// DuplicateRule is the rule above.
+var DuplicateRule = activity.DuplicateRule{
 	StartTolerance:    DuplicateStartTolerance,
 	RelativeTolerance: DuplicateRelativeTolerance,
 }

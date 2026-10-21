@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jlindbergh/my-tracks/backend/internal/activity"
 	"github.com/jlindbergh/my-tracks/backend/internal/gpxfile"
 )
 
@@ -67,9 +68,9 @@ func newActivity(startOffset time.Duration, durationS int, lengthFactor float64)
 	}
 }
 
-var rule = &DuplicateRule{StartTolerance: 2 * time.Second, RelativeTolerance: 0.02}
+var rule = &activity.DuplicateRule{StartTolerance: 2 * time.Second, RelativeTolerance: 0.02}
 
-func insert(t *testing.T, s *Store, userID string, na NewActivity, r *DuplicateRule) InsertResult {
+func insert(t *testing.T, s *Store, userID string, na NewActivity, r *activity.DuplicateRule) InsertResult {
 	t.Helper()
 	res, err := s.InsertActivity(context.Background(), userID, na, r)
 	if err != nil {
@@ -84,7 +85,7 @@ func TestInsertActivityDuplicates(t *testing.T) {
 	tests := []struct {
 		name string
 		next NewActivity
-		rule *DuplicateRule
+		rule *activity.DuplicateRule
 		want InsertStatus
 	}{
 		{"start 1s later, 1% longer", newActivity(time.Second, 3636, 1.01), rule, PossibleDuplicate},
@@ -106,8 +107,24 @@ func TestInsertActivityDuplicates(t *testing.T) {
 			if got.Status != tt.want {
 				t.Fatalf("status = %v, want %v (new %+v)", got.Status, tt.want, got.New)
 			}
-			if tt.want == PossibleDuplicate && (got.Existing == nil || got.Existing.ID != first.New.ID) {
+			if tt.want != PossibleDuplicate {
+				return
+			}
+			if got.Existing == nil || got.Existing.ID != first.New.ID {
 				t.Errorf("Existing = %+v, want activity %s", got.Existing, first.New.ID)
+			}
+			if got.Comparison == nil {
+				t.Error("Comparison is nil")
+			}
+			if got.New.ID != "" || got.New.DistanceM == 0 {
+				t.Errorf("New = %+v, want a measured activity without an ID", got.New)
+			}
+			list, err := s.ListActivities(context.Background(), u.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(list) != 1 {
+				t.Errorf("stored %d activities, want 1: the possible duplicate must not be stored", len(list))
 			}
 		})
 	}

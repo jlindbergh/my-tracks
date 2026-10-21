@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -49,6 +50,8 @@ type Result struct {
 	// Existing is the stored activity this file matched, for
 	// already_imported and possible_duplicate.
 	Existing *activity.Facts `json:"existing,omitempty"`
+	// Comparison is how Activity and Existing differ, for possible_duplicate.
+	Comparison *activity.Comparison `json:"comparison,omitempty"`
 }
 
 // Options control an import.
@@ -107,7 +110,7 @@ func (im *Importer) ImportGPX(ctx context.Context, userID, filename string, data
 		return Result{}, err
 	}
 
-	res.Activity, res.Existing = &ins.New, ins.Existing
+	res.Activity, res.Existing, res.Comparison = &ins.New, ins.Existing, ins.Comparison
 	switch ins.Status {
 	case store.Inserted:
 		res.Status, res.ActivityID = StatusImported, ins.New.ID
@@ -115,6 +118,8 @@ func (im *Importer) ImportGPX(ctx context.Context, userID, filename string, data
 		res.Status = StatusAlreadyImported
 	case store.PossibleDuplicate:
 		res.Status = StatusPossibleDuplicate
+	default:
+		return Result{}, fmt.Errorf("unexpected insert status %v", ins.Status)
 	}
 	return res, nil
 }
