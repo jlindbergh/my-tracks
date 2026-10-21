@@ -4,6 +4,7 @@ package gpxfile
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,12 @@ func (e *NoTrackError) Error() string { return ErrNoTrack.Error() }
 // Is makes errors.Is(err, ErrNoTrack) true.
 func (e *NoTrackError) Is(target error) bool { return target == ErrNoTrack }
 
+// ErrInvalidPosition is returned, wrapped with where in the file it is, when
+// a point's latitude or longitude is not a number or out of range. Nothing
+// from such a file is stored: the database cannot project those points, and
+// skipping them would silently change the track.
+var ErrInvalidPosition = errors.New("invalid GPS position")
+
 // Activity is the parsed content of one GPX file. All tracks (or, if the
 // file has none, routes) in the file become lines of the same activity.
 type Activity struct {
@@ -56,23 +63,27 @@ func Parse(data []byte, fallbackName string) (Activity, error) {
 	}
 
 	a := Activity{Name: g.Name}
-	for _, trk := range g.Tracks {
+	for i, trk := range g.Tracks {
 		if a.Name == "" {
 			a.Name = trk.Name
 		}
 		if a.Sport == "" {
 			a.Sport = trk.Type
 		}
-		for _, seg := range trk.Segments {
-			a.addLine(seg.Points)
+		for j, seg := range trk.Segments {
+			if err := a.addLine(seg.Points, fmt.Sprintf("track %d, segment %d", i+1, j+1)); err != nil {
+				return Activity{}, err
+			}
 		}
 	}
 	if len(a.Lines) == 0 {
-		for _, rte := range g.Routes {
+		for i, rte := range g.Routes {
 			if a.Name == "" {
 				a.Name = rte.Name
 			}
-			a.addLine(rte.Points)
+			if err := a.addLine(rte.Points, fmt.Sprintf("route %d", i+1)); err != nil {
+				return Activity{}, err
+			}
 		}
 	}
 	a.Sport = normalizeSport(a.Sport)
@@ -99,19 +110,43 @@ func Parse(data []byte, fallbackName string) (Activity, error) {
 	return a, nil
 }
 
-func (a *Activity) addLine(points []gpx.GPXPoint) {
+// addLine adds points as a line, unless fewer than two of them have a GPS
+// fix. where names the line in errors, e.g. "track 1, segment 2".
+func (a *Activity) addLine(points []gpx.GPXPoint, where string) error {
 	line := make([]LonLat, 0, len(points))
-	for _, p := range points {
+	for i, p := range points {
+		if err := checkPosition(p.Latitude, p.Longitude); err != nil {
+			return fmt.Errorf("%w: point %d of %s has %v", ErrInvalidPosition, i+1, where, err)
+		}
 		// Some exporters write 0,0 for points without a GPS fix.
 		if p.Latitude == 0 && p.Longitude == 0 {
 			continue
 		}
 		line = append(line, LonLat{Lon: p.Longitude, Lat: p.Latitude})
 	}
-	if len(line) < 2 {
-		return
+	if len(line) >= 2 {
+		a.Lines = append(a.Lines, line)
 	}
-	a.Lines = append(a.Lines, line)
+	return nil
+}
+
+// checkPosition returns an error describing what is wrong with lat and lon,
+// or nil if they are a valid WGS 84 position.
+func checkPosition(lat, lon float64) error {
+	if err := checkCoordinate("latitude", lat, 90); err != nil {
+		return err
+	}
+	return checkCoordinate("longitude", lon, 180)
+}
+
+func checkCoordinate(name string, v, limit float64) error {
+	switch {
+	case math.IsNaN(v) || math.IsInf(v, 0):
+		return fmt.Errorf("%s %v, which is not a number", name, v)
+	case v < -limit || v > limit:
+		return fmt.Errorf("%s %v, outside -%v to %v", name, v, limit, limit)
+	}
+	return nil
 }
 
 // WKT returns the activity's lines as a WKT MULTILINESTRING in EPSG:4326.
