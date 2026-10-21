@@ -3,6 +3,7 @@ import { importFiles, type ImportResult } from '../api';
 import { useConfig } from '../config';
 import DuplicateReview, { type ReviewItem } from './DuplicateReview';
 import DuplicateRulesInfo from './DuplicateRulesInfo';
+import FailedImports, { type FailedItem } from './FailedImports';
 import NoTrackNotice, { type NoTrackItem } from './NoTrackNotice';
 import { formatError } from '../format';
 import { formatCount } from '../plural';
@@ -105,7 +106,9 @@ export default function ImportPanel({ onImported }: Props) {
 
   const results = entries?.map((e) => e.result) ?? [];
   const count = (status: ImportResult['status']) => results.filter((r) => r.status === status).length;
-  const failed = entries?.filter((e) => e.result.status === 'failed') ?? [];
+  const failed: FailedItem[] = (entries ?? [])
+    .filter((e) => e.result.status === 'failed')
+    .map((e) => ({ key: e.key, file: e.file.name, error: e.result.error ?? 'Unknown error' }));
   const review: ReviewItem[] = (entries ?? [])
     .filter((e) => e.result.status === 'possible_duplicate' && !skipped.has(e.key))
     .flatMap(({ key, file, result: { activity, existing, comparison } }) =>
@@ -148,21 +151,10 @@ export default function ImportPanel({ onImported }: Props) {
         <DuplicateRulesInfo />
 
         {error && <p className="error">{error}</p>}
-        {summary && (
-          <div className="import-result">
-            {summary.filter(Boolean).join(', ')}
-            {failed.length > 0 && (
-              <ul>
-                {failed.map((e) => (
-                  <li key={e.key}>
-                    {e.file.name}: {e.result.error}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+        {summary && <div className="import-result">{summary.filter(Boolean).join(', ')}</div>}
       </div>
+
+      {failed.length > 0 && <FailedImports items={failed} />}
 
       {noTrack.length > 0 && <NoTrackNotice items={noTrack} />}
 
