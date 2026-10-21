@@ -66,10 +66,21 @@ export interface AppConfig {
   sports: string[];
 }
 
+/**
+ * The error for a failed response, e.g. "Import failed: the database is
+ * unavailable; try again later (500)". The backend's errors are plain text;
+ * other bodies, such as a proxy's HTML page, are left out.
+ */
+async function responseError(res: Response, action: string): Promise<Error> {
+  const isText = res.headers.get('Content-Type')?.startsWith('text/plain') ?? false;
+  const message = isText ? (await res.text()).trim() : '';
+  return new Error(message ? `${action} failed: ${message} (${res.status})` : `${action} failed (${res.status})`);
+}
+
 /** Fetches JSON from url. what names the data in the error message. */
 async function getJSON<T>(url: string, what: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Loading ${what} failed (${res.status})`);
+  if (!res.ok) throw await responseError(res, `Loading ${what}`);
   return res.json() as Promise<T>;
 }
 
@@ -90,6 +101,6 @@ export async function importFiles(files: File[], allowDuplicates = false): Promi
   for (const f of files) body.append('files', f, f.name);
   const url = allowDuplicates ? '/api/activities/import?allowDuplicates=true' : '/api/activities/import';
   const res = await fetch(url, { method: 'POST', body });
-  if (!res.ok) throw new Error(`Import failed (${res.status})`);
+  if (!res.ok) throw await responseError(res, 'Import');
   return res.json();
 }
