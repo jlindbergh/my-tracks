@@ -1,4 +1,5 @@
 import { formatSport } from '../format';
+import { formatCount, plural } from '../plural';
 
 export interface NoTrackItem {
   key: string;
@@ -21,14 +22,14 @@ export default function NoTrackNotice({ items }: Props) {
   return (
     <section className="notice" role="status" aria-labelledby="no-track-heading">
       <h2 id="no-track-heading">
-        {n} {n === 1 ? 'activity was' : 'activities were'} not imported
+        {formatCount(n, 'activity was', 'activities were')} not imported
       </h2>
       <p className="hint">
-        {n === 1 ? 'It has' : 'They have'} no GPS track, so there is nothing to show on the map. This is usual for
+        {plural(n, 'It has', 'They have')} no GPS track, so there is nothing to show on the map. This is usual for
         indoor activities like treadmill runs, trainer rides or gym sessions.
       </p>
       <p className="notice-types">
-        <span className="hint">Activity {sports.length === 1 ? 'type' : 'types'}:</span>{' '}
+        <span className="hint">Activity {plural(sports.length, 'type', 'types')}:</span>{' '}
         {sports.map(([sport, count], i) => (
           <span key={sport}>
             {i > 0 && ', '}

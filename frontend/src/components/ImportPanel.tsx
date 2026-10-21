@@ -3,6 +3,7 @@ import { fetchDuplicateRules, importFiles, type DuplicateRules, type ImportResul
 import DuplicateReview, { type ReviewItem } from './DuplicateReview';
 import DuplicateRulesInfo from './DuplicateRulesInfo';
 import NoTrackNotice, { type NoTrackItem } from './NoTrackNotice';
+import { formatCount } from '../plural';
 
 interface Props {
   /** Called after an import that stored at least one new activity. */
@@ -19,7 +20,7 @@ interface Entry {
 let nextKey = 0;
 
 function possibleDuplicates(n: number): string {
-  return `${n} possible duplicate${n === 1 ? '' : 's'}`;
+  return formatCount(n, 'possible duplicate', 'possible duplicates');
 }
 
 export default function ImportPanel({ onImported }: Props) {

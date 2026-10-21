@@ -1,5 +1,6 @@
 import type { DuplicateRules } from '../api';
 import { formatPercent } from '../format';
+import { formatCount } from '../plural';
 
 interface Props {
   rules: DuplicateRules | null;
@@ -7,7 +8,7 @@ interface Props {
 
 /** Explains how duplicates are detected, using the backend's actual values. */
 export default function DuplicateRulesInfo({ rules }: Props) {
-  const seconds = rules ? `${rules.startToleranceS} second${rules.startToleranceS === 1 ? '' : 's'}` : 'a few seconds';
+  const seconds = rules ? formatCount(rules.startToleranceS, 'second', 'seconds') : 'a few seconds';
   const percent = rules ? formatPercent(rules.relativeTolerance) : 'a few percent';
 
   return (
