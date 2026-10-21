@@ -39,6 +39,14 @@ func (e *NoTrackError) Is(target error) bool { return target == ErrNoTrack }
 // skipping them would silently change the track.
 var ErrInvalidPosition = errors.New("invalid GPS position")
 
+// ErrInvalidTimestamps is returned, wrapped, when the file's first and last
+// timestamps are further apart than MaxDuration.
+var ErrInvalidTimestamps = errors.New("invalid timestamps")
+
+// MaxDuration is the longest an activity can last: its duration is stored
+// in seconds as a 32-bit integer, which is about 68 years.
+const MaxDuration = math.MaxInt32 * time.Second
+
 // Activity is the parsed content of one GPX file. All tracks (or, if the
 // file has none, routes) in the file become lines of the same activity.
 type Activity struct {
@@ -99,7 +107,12 @@ func Parse(data []byte, fallbackName string) (Activity, error) {
 		start := tb.StartTime.UTC()
 		a.StartedAt = &start
 		if !tb.EndTime.IsZero() {
-			d := int(tb.EndTime.Sub(tb.StartTime).Seconds())
+			span := tb.EndTime.Sub(tb.StartTime)
+			if span > MaxDuration {
+				return Activity{}, fmt.Errorf("%w: the first and last points are %d days apart (%s to %s)",
+					ErrInvalidTimestamps, int(span.Hours()/24), tb.StartTime.UTC().Format(time.DateOnly), tb.EndTime.UTC().Format(time.DateOnly))
+			}
+			d := int(span.Seconds())
 			a.DurationS = &d
 		}
 	} else if g.Time != nil {
