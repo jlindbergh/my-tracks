@@ -1,3 +1,8 @@
+/** The message to show for a caught error. */
+export function formatError(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 export function formatDistance(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
 }

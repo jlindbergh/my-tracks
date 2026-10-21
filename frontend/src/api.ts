@@ -40,16 +40,19 @@ export interface DuplicateRules {
 /** Absolute URL template for the signed-in user's activity tiles. */
 export const tilesUrl = `${window.location.origin}/api/tiles/{z}/{x}/{y}`;
 
-export async function fetchActivities(signal?: AbortSignal): Promise<Activity[]> {
-  const res = await fetch('/api/activities', { signal });
-  if (!res.ok) throw new Error(`Loading activities failed (${res.status})`);
-  return res.json();
+/** Fetches JSON from url. what names the data in the error message. */
+async function getJSON<T>(url: string, what: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`Loading ${what} failed (${res.status})`);
+  return res.json() as Promise<T>;
 }
 
-export async function fetchDuplicateRules(signal?: AbortSignal): Promise<DuplicateRules> {
-  const res = await fetch('/api/import/rules', { signal });
-  if (!res.ok) throw new Error(`Loading import rules failed (${res.status})`);
-  return res.json();
+export function fetchActivities(signal?: AbortSignal): Promise<Activity[]> {
+  return getJSON('/api/activities', 'activities', signal);
+}
+
+export function fetchDuplicateRules(signal?: AbortSignal): Promise<DuplicateRules> {
+  return getJSON('/api/import/rules', 'import rules', signal);
 }
 
 /**

@@ -3,6 +3,7 @@ import { fetchDuplicateRules, importFiles, type DuplicateRules, type ImportResul
 import DuplicateReview, { type ReviewItem } from './DuplicateReview';
 import DuplicateRulesInfo from './DuplicateRulesInfo';
 import NoTrackNotice, { type NoTrackItem } from './NoTrackNotice';
+import { formatError } from '../format';
 import { formatCount } from '../plural';
 
 interface Props {
@@ -44,45 +45,47 @@ export default function ImportPanel({ onImported }: Props) {
     return () => controller.abort();
   }, []);
 
+  /** Uploads files and hands the results, in upload order, to onResults. */
+  async function runImport(files: File[], allowDuplicates: boolean, onResults: (results: ImportResult[]) => void) {
+    setBusy(true);
+    setError(null);
+    try {
+      const results = await importFiles(files, allowDuplicates);
+      onResults(results);
+      if (results.some((r) => r.status === 'imported')) onImported();
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function upload(files: File[]) {
     const gpx = files.filter((f) => f.name.toLowerCase().endsWith('.gpx'));
     if (gpx.length === 0) {
       setError('Only .gpx files can be imported for now.');
       return;
     }
-    setBusy(true);
-    setError(null);
     setEntries(null);
     setSkipped(new Set());
     setSelected(new Set());
-    try {
-      const results = await importFiles(gpx);
+    await runImport(gpx, false, (results) => {
       setEntries(results.map((result, i) => ({ key: String(nextKey++), file: gpx[i], result })));
-      if (results.some((r) => r.status === 'imported')) onImported();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function importSelectedAnyway() {
     if (!entries) return;
     const chosen = entries.filter((e) => selected.has(e.key));
-    setBusy(true);
-    setError(null);
-    try {
-      const results = await importFiles(chosen.map((e) => e.file), true);
-      // Results come back in upload order.
-      const byKey = new Map(chosen.map((e, i) => [e.key, results[i]]));
-      setEntries(entries.map((e) => ({ ...e, result: byKey.get(e.key) ?? e.result })));
-      setSelected(new Set());
-      if (results.some((r) => r.status === 'imported')) onImported();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+    await runImport(
+      chosen.map((e) => e.file),
+      true,
+      (results) => {
+        const byKey = new Map(chosen.map((e, i) => [e.key, results[i]]));
+        setEntries(entries.map((e) => ({ ...e, result: byKey.get(e.key) ?? e.result })));
+        setSelected(new Set());
+      },
+    );
   }
 
   function toggle(key: string) {

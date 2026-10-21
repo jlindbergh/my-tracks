@@ -24,11 +24,15 @@ const lineColor = [
 
 const lineWidth = ['interpolate', ['linear'], ['zoom'], 5, 1.5, 12, 3, 16, 5] as unknown as number;
 
+const lineLayout = { 'line-cap': 'round', 'line-join': 'round' } as const;
+
+const activitiesLayerId = 'activities-line';
+
 const activitiesLayer: LayerProps = {
-  id: 'activities-line',
+  id: activitiesLayerId,
   type: 'line',
   'source-layer': 'activities',
-  layout: { 'line-cap': 'round', 'line-join': 'round' },
+  layout: lineLayout,
   paint: { 'line-color': lineColor, 'line-width': lineWidth, 'line-opacity': 0.8 },
 };
 
@@ -79,7 +83,7 @@ export default function TrackMap({ mapRef, dataVersion, selectedId, onSelect, on
       initialViewState={{ longitude: 15, latitude: 62, zoom: 4 }}
       mapStyle={basemapStyle}
       onLoad={onLoad}
-      interactiveLayerIds={['activities-line']}
+      interactiveLayerIds={[activitiesLayerId]}
       onClick={handleClick}
       onMouseEnter={() => setCursor('pointer')}
       onMouseLeave={() => setCursor('')}
@@ -94,9 +98,9 @@ export default function TrackMap({ mapRef, dataVersion, selectedId, onSelect, on
           type="line"
           source-layer="activities"
           filter={['==', ['get', 'id'], selectedId ?? '']}
-          layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+          layout={lineLayout}
           paint={{ 'line-color': '#111', 'line-width': 6, 'line-opacity': 0.9 }}
-          beforeId="activities-line"
+          beforeId={activitiesLayerId}
         />
       </Source>
       {popup && (
