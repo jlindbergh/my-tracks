@@ -22,7 +22,7 @@ Follow official standards and best practices from https://dev.to/leapcell/go-cod
 
 ### Frontend
 Ensure adhering to the [react reference rules](https://react.dev/reference/rules)
-Use npx audit when adding or removing packages and report if there are any dependencies with known vulnerabilities  
+Use npm audit when adding or removing packages and report if there are any dependencies with known vulnerabilities  
 
 
 ## Architecture
